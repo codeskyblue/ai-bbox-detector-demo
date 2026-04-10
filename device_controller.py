@@ -29,7 +29,9 @@ class DeviceController(ABC):
         pass
 
     @abstractmethod
-    def swipe_direction(self, direction: SwipeDirection, ratio: float = 0.5, duration_ms: int = 300) -> None:
+    def swipe_direction(
+        self, direction: SwipeDirection, ratio: float = 0.5, duration_ms: int = 300
+    ) -> None:
         """向指定方向滑动"""
         pass
 

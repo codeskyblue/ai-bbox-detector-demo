@@ -1,22 +1,32 @@
 """设备Agent使用示例 - 演示如何使用通用Agent框架"""
 
-import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+import re
 
+import yaml
 from android_controller import AndroidController
+
+
+def _str_presenter(dumper, data):
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+yaml.add_representer(str, _str_presenter)
 from device_agent import DeviceAgent, Action, ActionType, AgentConfig, TaskStep
 from bbox_detector import detect_element, draw_bbox
 
 
 # ========== 任务记忆系统 ==========
 
+
 class TaskMemory:
     """任务记忆管理系统 - 存储和复用任务执行步骤"""
 
-    def __init__(self, memory_file: str | Path = "task_memory.json"):
+    def __init__(self, memory_file: str | Path = "task_memory.yaml"):
         self.memory_file = Path(memory_file)
         self._memories: list[dict] = self._load_memories()
 
@@ -24,8 +34,8 @@ class TaskMemory:
         """从文件加载记忆"""
         if self.memory_file.exists():
             try:
-                data = json.loads(self.memory_file.read_text(encoding="utf-8"))
-                return data.get("tasks", [])
+                data = yaml.safe_load(self.memory_file.read_text(encoding="utf-8"))
+                return data.get("tasks", []) if data else []
             except Exception as e:
                 print(f"⚠️  加载任务记忆失败: {e}")
                 return []
@@ -39,7 +49,17 @@ class TaskMemory:
             "total_tasks": len(self._memories),
             "tasks": self._memories,
         }
-        self.memory_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        # yaml会自动将多行字符串保存为块样式标量（|- 或 |+）
+        self.memory_file.write_text(
+            yaml.dump(
+                data,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     def find_similar_tasks(self, task: str, limit: int = 3) -> list[dict]:
         """
@@ -62,13 +82,14 @@ class TaskMemory:
 
         # 步骤1：字符串完全匹配
         exact_matches = [
-            m for m in self._memories
-            if m["success"] and m["task"] == task
+            m for m in self._memories if m["success"] and m["task"] == task
         ]
         if exact_matches:
             print(f"💡 找到完全相同的任务 ({len(exact_matches)}个)")
             # 按时间排序，返回最新的
-            return sorted(exact_matches, key=lambda x: x["timestamp"], reverse=True)[:limit]
+            return sorted(exact_matches, key=lambda x: x["timestamp"], reverse=True)[
+                :limit
+            ]
 
         # 步骤2：使用AI查找相似任务
         try:
@@ -90,10 +111,9 @@ class TaskMemory:
                 return []
 
             # 构建AI提示
-            tasks_list = "\n".join([
-                f"{i}. {t['task']}"
-                for i, t in enumerate(successful_tasks)
-            ])
+            tasks_list = "\n".join(
+                [f"{i}. {t['task']}" for i, t in enumerate(successful_tasks)]
+            )
 
             prompt = f"""你是一个任务相似度分析专家。请从以下历史任务列表中，找出与当前任务最相似的{limit}个任务。
 
@@ -125,7 +145,7 @@ class TaskMemory:
             if not content:
                 return []
 
-            result = json.loads(content)
+            result = yaml.safe_load(content)
             indices = result.get("similar_indices", [])
 
             if not indices:
@@ -153,7 +173,7 @@ class TaskMemory:
         task: str,
         history: list[TaskStep],
         success: bool,
-        summary: str = "",
+        summary: str | None = None,
     ):
         """
         保存任务记忆
@@ -162,25 +182,14 @@ class TaskMemory:
             task: 任务描述
             history: 执行历史
             success: 是否成功
-            summary: 任务总结
+            summary: Markdown格式的任务总结
         """
-        # 提取成功的关键步骤
-        successful_steps = [
-            {
-                "action": step.action.model_dump(),
-                "observation": step.observation,
-            }
-            for step in history
-            if step.success and step.action.type not in (ActionType.DONE, ActionType.FAIL)
-        ]
-
         memory = {
             "task": task,
             "success": success,
             "timestamp": datetime.now().isoformat(),
             "total_steps": len(history),
-            "summary": summary,
-            "key_steps": successful_steps,
+            "summary": summary or "",
         }
 
         self._memories.append(memory)
@@ -191,32 +200,29 @@ class TaskMemory:
         if not similar_tasks:
             return "（无相关历史任务）"
 
-        lines = ["## 相似历史任务参考"]
+        lines = ["## 相似历史任务经验参考"]
         for i, task_mem in enumerate(similar_tasks, 1):
             status = "✅ 成功" if task_mem["success"] else "❌ 失败"
             lines.append(f"\n### {i}. {task_mem['task']} - {status}")
 
-            if task_mem.get("summary"):
-                lines.append(f"**总结**: {task_mem['summary']}")
+            summary = task_mem.get("summary", "")
+            if summary:
+                # 直接使用Markdown内容
+                lines.append(summary)
+            else:
+                lines.append("- 无总结信息")
 
-            lines.append("**关键步骤**:")
-            for step in task_mem.get("key_steps", [])[:5]:  # 最多显示5步
-                action = step["action"]
-                parts = [f"{action['type']}"]
-                if action.get("target"):
-                    parts.append(f"目标:{action['target']}")
-                if action.get("text"):
-                    parts.append(f"输入:{action['text']}")
-                if action.get("direction"):
-                    parts.append(f"方向:{action['direction']}")
-                lines.append(f"  - {' '.join(parts)}")
+        # 在末尾添加过期提示
+        lines.append(
+            "\n**⚠️ 注意: 以上经验可能随APP更新失效，请根据当前屏幕实际情况灵活调整**"
+        )
 
         return "\n".join(lines)
 
 
 def _summarize_task(task: str, history: list[TaskStep], success: bool) -> str:
     """
-    总结任务执行结果
+    使用AI总结任务执行结果，生成Markdown格式的经验总结
 
     Args:
         task: 任务描述
@@ -224,31 +230,170 @@ def _summarize_task(task: str, history: list[TaskStep], success: bool) -> str:
         success: 是否成功
 
     Returns:
-        任务总结
+        Markdown格式的任务总结
     """
-    if not success:
-        return f"任务执行失败，共尝试 {len(history)} 步"
+    try:
+        from openai import OpenAI
 
-    # 提取关键模式
-    successful_taps = [
-        h.action.target
-        for h in history
-        if h.success and h.action.type == ActionType.TAP and h.action.target
-    ]
+        client = OpenAI(
+            base_url=os.getenv("BASE_URL", "https://api.openai.com/v1"),
+            api_key=os.getenv("API_KEY"),
+        )
 
-    successful_swipes = [
-        h.action.direction
-        for h in history
-        if h.success and h.action.type == ActionType.SWIPE
-    ]
+        # 构建操作历史摘要
+        steps_summary = []
+        for h in history:
+            status = "✅" if h.success else "❌"
+            action = h.action
+            if action.type == ActionType.TAP and action.target:
+                steps_summary.append(f"{status} 点击: {action.target}")
+            elif action.type == ActionType.INPUT and action.text:
+                steps_summary.append(f"{status} 输入: {action.text}")
+            elif action.type == ActionType.SWIPE:
+                steps_summary.append(f"{status} 滑动: {action.direction}")
+            elif action.type == ActionType.BACK:
+                steps_summary.append(f"{status} 返回")
+            elif action.type == ActionType.WAIT:
+                steps_summary.append(f"{status} 等待")
 
-    parts = [f"成功完成，共 {len(history)} 步"]
-    if successful_taps:
-        parts.append(f"关键点击: {' → '.join(successful_taps[:5])}")
-    if successful_swipes:
-        parts.append(f"滑动方向: {', '.join(successful_swipes)}")
+        steps_text = "\n".join(steps_summary)
 
-    return " | ".join(parts)
+        prompt = f"""请分析以下任务执行历史，生成经验总结（Markdown格式）。
+
+任务: {task}
+结果: {"成功" if success else "失败"}
+
+执行步骤:
+{steps_text}
+
+请以Markdown格式返回经验总结，包含成功做法和错误尝试。
+
+成功任务示例：
+```markdown
+成功完成，共6步
+
+# 正确操作步骤
+
+1. 点击 设置
+2. 点击 个人资料
+3. 点击 昵称
+4. 输入 kitty
+5. 滑动 down
+6. 点击 保存
+
+# 错误尝试（请避免）
+
+- 点击"修改资料"按钮无效（此按钮无法修改昵称，应该点击"昵称"）
+- 向左滑动没找到目标（页面需要向下滑动才能看到昵称选项）
+```
+
+失败任务示例：
+```markdown
+任务失败，共尝试5步
+
+# 执行过的操作
+
+1. 点击 设置
+2. 点击 个人资料
+3. 点击 账号设置（无效，此按钮不存在）
+4. 向下滑动（没找到目标）
+
+# 失败原因
+
+- 找不到"账号设置"入口，可能需要先完成其他步骤
+- 向下滑动后仍未发现目标选项
+```
+
+要求：
+1. 按照示例格式生成Markdown
+2. 只返回Markdown内容，不要用代码块包裹
+3. 紧凑格式，列表项之间不要空行"""
+
+        response = client.chat.completions.create(
+            model=os.getenv("MODEL_NAME", "gpt-4o"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是一个任务总结专家，擅长分析操作历史并提取关键信息。",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=1024,
+            temperature=0.0,
+        )
+
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("AI返回空响应")
+        return _compress_markdown(content)
+
+    except Exception as e:
+        print(f"⚠️  AI总结失败，不保存: {e}")
+
+
+def _clarify_task(task: str) -> str:
+    """
+    使用AI将用户输入的任务描述重新表述为清晰、无歧义的操作指令。
+
+    Args:
+        task: 用户原始任务描述（可能存在语法或语义问题）
+
+    Returns:
+        经过AI重新表述的清晰任务描述
+    """
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            base_url=os.getenv("BASE_URL", "https://api.openai.com/v1"),
+            api_key=os.getenv("API_KEY"),
+        )
+
+        response = client.chat.completions.create(
+            model=os.getenv("MODEL_NAME", "gpt-4o"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "你是一个手机自动化任务解析专家。"
+                        "用户会给你一段手机操作任务描述，可能存在语法错误、表达不清或语义歧义。"
+                        "请将其重新表述为一句清晰、完整、无歧义的操作指令。"
+                        "只返回重新表述后的任务描述，不要添加任何解释。"
+                    ),
+                },
+                {"role": "user", "content": task},
+            ],
+            max_tokens=256,
+            temperature=0.0,
+        )
+
+        clarified = (response.choices[0].message.content or "").strip()
+        if clarified and clarified != task:
+            print(f"✏️  任务已澄清: {task!r} → {clarified!r}")
+            return clarified
+        return task
+
+    except Exception as e:
+        print(f"⚠️  任务澄清失败，使用原始描述: {e}")
+        return task
+
+
+def _compress_markdown(md: str) -> str:
+    # 移除代码块标记
+    if md.startswith("```"):
+        md = re.sub(r"^```[\w]*\n", "", md)  # 移除开头的```和可选的语言标记
+        md = re.sub(r"\n```\s*$", "", md)  # 移除结尾的```
+
+    # 多个空行 -> 一个
+    md = re.sub(r"\n{3,}", "\n\n", md)
+
+    # 列表之间的空行去掉
+    md = re.sub(r"^(\s*[-*+] .+)\n+(?=\s*[-*+] )", r"\1\n", md, flags=re.MULTILINE)
+
+    # 数字列表
+    md = re.sub(r"^(\s*\d+\. .+)\n+(?=\s*\d+\. )", r"\1\n", md, flags=re.MULTILINE)
+
+    return md.strip()
 
 
 # 全局任务记忆实例
@@ -350,13 +495,17 @@ def demo_ai_assisted_task(task: str = "修改昵称为kitty"):
     controller = AndroidController(devices[0])
     agent = DeviceAgent(
         controller,
-        config=AgentConfig(max_steps=30, save_screenshots=True, verbose=True)
+        config=AgentConfig(max_steps=30, save_screenshots=True, verbose=True),
     )
 
     info = controller.get_device_info()
     print(f"📋 设备信息: {info['model']} ({info['width']}x{info['height']})")
 
     print(f"\n🎯 任务: {task}")
+
+    # 用AI澄清任务描述
+    task = _clarify_task(task)
+
     print("🤖 AI将自主分析屏幕并决策每一步操作...\n")
 
     # 执行AI自主任务
@@ -364,6 +513,7 @@ def demo_ai_assisted_task(task: str = "修改昵称为kitty"):
 
 
 # ========== AI决策辅助函数 ==========
+
 
 def _get_system_prompt() -> str:
     """获取系统提示词"""
@@ -391,11 +541,15 @@ def _get_system_prompt() -> str:
   "target": "目标元素描述（仅tap时需要，其他操作省略此字段）",
   "text": "输入文本（仅input时需要，其他操作省略此字段）",
   "direction": "滑动方向（仅swipe时需要，值为up/down/left/right之一，其他操作省略此字段）",
-  "wait_ms": 等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）
+  "wait_ms": 等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
+  "return_result": true（仅done时需要，表示任务需要返回观察结果）
+  "result": "任务返回的结果或答案（仅done时需要）"
 }
 
-重要：只包含你使用的操作类型所需的字段，不要包含空字符串或null值。
-例如：tap操作只需要type、thought、target三个字段。
+重要：
+- 只包含你使用的操作类型所需的字段，不要包含空字符串或null值
+- 例如：tap操作只需要type、thought、target三个字段
+- 当任务需要返回观察结果时，done操作必须包含return_result和result字段
 
 注意：
 - 优先参考历史任务的成功步骤
@@ -403,7 +557,8 @@ def _get_system_prompt() -> str:
 - 如果找不到元素，可以尝试滑动或返回
 - 任务完成后使用done
 - 无法继续时使用fail
-- input类型操作前需要先tap对应的输入框"""
+- input类型操作前需要先tap对应的输入框
+- 如果任务要求返回信息（如"查看好友发了什么消息"），done时必须设置return_result:true并在result中描述结果"""
 
 
 def _build_history_summary(history: list) -> str:
@@ -413,37 +568,39 @@ def _build_history_summary(history: list) -> str:
 
     lines = []
     for h in history:
-        status = "✅" if h['success'] else "❌"
-        action = h['action']
+        status = "✅" if h["success"] else "❌"
+        action = h["action"]
 
         # 构建动作详情
         parts = [f"类型: {action['type']}"]
-        if action.get('thought'):
+        if action.get("thought"):
             parts.append(f"思考: {action['thought']}")
-        if action.get('target'):
+        if action.get("target"):
             parts.append(f"目标: {action['target']}")
-        if action.get('text'):
+        if action.get("text"):
             parts.append(f"输入: {action['text']}")
-        if action.get('direction'):
+        if action.get("direction"):
             parts.append(f"方向: {action['direction']}")
-        if action.get('wait_ms'):
+        if action.get("wait_ms"):
             parts.append(f"等待: {action['wait_ms']}ms")
 
         details = ", ".join(parts)
-        obs = f" → {h['observation']}" if h.get('observation') else ""
+        obs = f" → {h['observation']}" if h.get("observation") else ""
         lines.append(f"[步骤{h['step']}] {status} {details}{obs}")
 
     return "\n".join(lines)
 
 
-def _build_user_prompt_with_memory(task: str, context: dict, memory_reference: str) -> str:
+def _build_user_prompt_with_memory(
+    task: str, context: dict, memory_reference: str
+) -> str:
     """构建用户消息（包含历史任务参考）"""
-    history_summary = _build_history_summary(context['history'])
-    device_info = context['device_info']
+    history_summary = _build_history_summary(context["history"])
+    device_info = context["device_info"]
 
     return f"""任务：{task}
 
-设备信息：{device_info['model']} ({device_info['width']}x{device_info['height']})
+设备信息：{device_info["model"]} ({device_info["width"]}x{device_info["height"]})
 
 {memory_reference}
 
@@ -462,7 +619,9 @@ def _encode_screenshot(screenshot_path: str | Path) -> str:
         return base64.b64encode(f.read()).decode()
 
 
-def _call_ai_decision(client, model: str, system_prompt: str, user_prompt: str, screenshot_b64: str) -> dict:
+def _call_ai_decision(
+    client, model: str, system_prompt: str, user_prompt: str, screenshot_b64: str
+) -> dict:
     """调用AI决策API"""
     response = client.chat.completions.create(
         model=model,
@@ -491,6 +650,7 @@ def _call_ai_decision(client, model: str, system_prompt: str, user_prompt: str, 
     print(f"🧠 AI思考: {decision_text[:200]}...")
 
     import json
+
     return json.loads(decision_text)
 
 
@@ -499,22 +659,36 @@ def _parse_action_from_decision(decision: dict) -> Action:
     action_type = ActionType(decision.get("type", "fail"))
 
     # 构建Action参数，过滤掉空字符串
-    kwargs = {"type": action_type, "thought": decision.get("thought") or ""}
+    kwargs = {
+        "type": action_type,
+        "thought": decision.get("thought") or "",
+    }
 
     # 只在非空时添加可选字段
     if decision.get("target"):
         kwargs["target"] = decision["target"]
     if decision.get("text"):
         kwargs["text"] = decision["text"]
-    if decision.get("direction") and decision["direction"] in ("up", "down", "left", "right"):
+    if decision.get("direction") and decision["direction"] in (
+        "up",
+        "down",
+        "left",
+        "right",
+    ):
         kwargs["direction"] = decision["direction"]
     if decision.get("wait_ms"):
         kwargs["wait_ms"] = decision["wait_ms"]
+    if decision.get("return_result"):
+        kwargs["return_result"] = True
+    if decision.get("result"):
+        kwargs["result"] = decision["result"]
 
     return Action(**kwargs)
 
 
-def _handle_task_status(action: Action, agent: DeviceAgent, task: str, task_memory: TaskMemory) -> bool:
+def _handle_task_status(
+    action: Action, agent: DeviceAgent, task: str, task_memory: TaskMemory
+) -> bool:
     """
     处理任务状态并保存记忆
 
@@ -523,13 +697,20 @@ def _handle_task_status(action: Action, agent: DeviceAgent, task: str, task_memo
     """
     if action.type == ActionType.DONE:
         print("\n🎉 任务完成！")
+
+        # 如果需要返回结果
+        if action.return_result and action.result:
+            print(f"\n📋 任务结果:")
+            print(f"   {action.result}")
+            print(f"\n📸 当前截图: {agent.get_current_screenshot()}")
+
         agent.save_history()
         agent.print_summary()
 
         # 保存成功任务记忆
         summary = _summarize_task(task, agent.history, success=True)
         task_memory.save_task(task, agent.history, success=True, summary=summary)
-        print(f"💾 已保存任务记忆: {summary}")
+        print(f"💾 已保存任务记忆")
 
         return True
 
@@ -550,13 +731,16 @@ def _handle_task_status(action: Action, agent: DeviceAgent, task: str, task_memo
 def _handle_ai_error(agent: DeviceAgent, error: Exception):
     """处理AI决策错误"""
     print(f"❌ AI决策出错: {error}")
-    agent.step(Action(
-        type=ActionType.BACK,
-        thought="AI决策出错，尝试返回",
-    ))
+    agent.step(
+        Action(
+            type=ActionType.BACK,
+            thought="AI决策出错，尝试返回",
+        )
+    )
 
 
 # ========== 主函数 ==========
+
 
 def execute_ai_task(agent: DeviceAgent, task: str):
     """
@@ -581,15 +765,20 @@ def execute_ai_task(agent: DeviceAgent, task: str):
     similar_tasks = task_memory.find_similar_tasks(task)
 
     if similar_tasks:
-        print(f"💡 找到 {len(similar_tasks)} 个相似历史任务，将作为参考")
+        print(f"💡 找到 {len(similar_tasks)} 个相似历史任务，将作为参考:")
+        for i, task_mem in enumerate(similar_tasks, 1):
+            status = "✅" if task_mem["success"] else "❌"
+            print(f"   {i}. {status} {task_mem['task']}")
+    else:
+        print("💡 未找到相似历史任务")
 
     # 缓存系统提示词
     system_prompt = _get_system_prompt()
 
     for step in range(max_steps):
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"🤖 AI决策 - 步骤 {step + 1}/{max_steps}")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
 
         # 准备数据
         screenshot_path = agent.get_current_screenshot()
@@ -602,7 +791,9 @@ def execute_ai_task(agent: DeviceAgent, task: str):
 
         # 调用AI决策
         try:
-            decision = _call_ai_decision(client, model, system_prompt, user_prompt, screenshot_b64)
+            decision = _call_ai_decision(
+                client, model, system_prompt, user_prompt, screenshot_b64
+            )
             action = _parse_action_from_decision(decision)
 
             # 执行动作
@@ -639,11 +830,13 @@ def demo_find_and_click():
     agent = DeviceAgent(controller)
 
     # 查找并点击元素
-    agent.step(Action(
-        type=ActionType.TAP,
-        thought="查找并点击返回按钮",
-        target="返回按钮",
-    ))
+    agent.step(
+        Action(
+            type=ActionType.TAP,
+            thought="查找并点击返回按钮",
+            target="返回按钮",
+        )
+    )
 
     agent.save_history()
 

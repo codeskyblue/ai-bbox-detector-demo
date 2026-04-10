@@ -4,12 +4,12 @@ import subprocess
 import re
 from pathlib import Path
 
-from bbox_detector import BBox, DetectionResult
 from device_controller import DeviceController, SwipeDirection
 
 
 class DeviceInfo:
     """设备信息"""
+
     def __init__(self, serial: str, model: str, width: int, height: int):
         self.serial = serial
         self.model = model
@@ -104,7 +104,16 @@ class AndroidController(DeviceController):
             x2, y2: 结束坐标
             duration_ms: 滑动持续时间（毫秒）
         """
-        self._run_adb("shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(duration_ms))
+        self._run_adb(
+            "shell",
+            "input",
+            "swipe",
+            str(x1),
+            str(y1),
+            str(x2),
+            str(y2),
+            str(duration_ms),
+        )
 
     def swipe_direction(
         self,

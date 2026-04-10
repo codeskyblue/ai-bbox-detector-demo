@@ -13,24 +13,28 @@ from device_controller import DeviceController, SwipeDirection
 
 class ActionType(str, Enum):
     """动作类型"""
-    TAP = "tap"               # 点击元素
-    INPUT = "input"           # 输入文本
-    SWIPE = "swipe"           # 滑动
-    BACK = "back"             # 返回
-    WAIT = "wait"             # 等待
-    DONE = "done"             # 任务完成
-    FAIL = "fail"             # 任务失败
+
+    TAP = "tap"  # 点击元素
+    INPUT = "input"  # 输入文本
+    SWIPE = "swipe"  # 滑动
+    BACK = "back"  # 返回
+    WAIT = "wait"  # 等待
+    DONE = "done"  # 任务完成
+    FAIL = "fail"  # 任务失败
 
 
 class Action(BaseModel):
     """执行的动作"""
+
     type: ActionType
-    thought: str              # 为什么要执行这个动作
-    target: str | None = None # 目标元素描述（tap用）
+    thought: str  # 为什么要执行这个动作
+    target: str | None = None  # 目标元素描述（tap用）
     position: tuple[int, int] | None = None  # 具体坐标
-    text: str | None = None   # 输入的文本
+    text: str | None = None  # 输入的文本
     direction: SwipeDirection | None = None  # 滑动方向
-    wait_ms: int = 1000       # 等待时间
+    wait_ms: int = 1000  # 等待时间
+    return_result: bool = False  # 是否返回当前屏幕的观察结果
+    result: str | None = None  # 任务返回的结果/答案
 
     class Config:
         use_enum_values = True
@@ -48,18 +52,19 @@ class Action(BaseModel):
         elif self.type == ActionType.WAIT:
             return f"等待 {self.wait_ms}ms"
         elif self.type == ActionType.DONE:
-            return f"✅ 完成: {self.thought}"
+            return f"✅ 完成: {self.thought}" if self.thought else "✅ 完成"
         elif self.type == ActionType.FAIL:
-            return f"❌ 失败: {self.thought}"
+            return f"❌ 失败: {self.thought}" if self.thought else "❌ 失败"
         return self.type
 
 
 class TaskStep(BaseModel):
     """任务执行步骤记录"""
+
     step_number: int
     screenshot_path: str
     action: Action
-    observation: str      # 执行后的观察结果
+    observation: str  # 执行后的观察结果
     success: bool
     timestamp: float
 
@@ -69,7 +74,8 @@ class TaskStep(BaseModel):
 
 class AgentConfig(BaseModel):
     """Agent配置"""
-    max_steps: int = 20          # 最大执行步数
+
+    max_steps: int = 20  # 最大执行步数
     screenshot_dir: str = "screenshots"
     save_screenshots: bool = True
     verbose: bool = True
@@ -217,8 +223,7 @@ class DeviceAgent:
             "steps": [step.model_dump() for step in self.history],
         }
         Path(path).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8"
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         self._log(f"\n📝 任务历史已保存至: {path}")
 

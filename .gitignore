@@ -223,3 +223,4 @@ result.png
 .DS_Store
 screenshots/
 task_*.json
+task_*.yaml
