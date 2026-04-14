@@ -8,14 +8,42 @@ AI 驱动的 UI 自动化框架，支持视觉定位和自主任务执行。
 - 🤖 自主决策执行任务
 - 🧠 任务记忆学习
 - 📱 Android / iOS 设备支持
+- 🔧 灵活的模型配置（支持不同场景使用不同模型）
 
 ## 安装
 
 ```bash
 uv sync
 cp .env.example .env
-# 编辑 .env 配置 API_KEY
+# 编辑 .env 配置 API_KEY 和模型
 ```
+
+## 配置
+
+在 `.env` 文件中配置 OpenAI 兼容的 API：
+
+```bash
+# 基础配置
+BASE_URL=https://api.openai.com/v1
+API_KEY=sk-xxx
+MODEL_NAME=doubao-seed-2.0-pro
+
+# 可选：为不同场景配置不同的模型
+MODEL_DECISION=gpt-4o      # AI决策模型（需要视觉能力）
+MODEL_DETECT=doubao-seed-2.0-pro             # 元素检测模型（需要视觉能力）
+MODEL_TEXT=gpt-4o-mini          # 文本处理模型（总结、澄清等）
+
+# 请求超时时间（秒）
+REQUEST_TIMEOUT=60
+```
+
+### 场景说明
+
+| 场景 | 说明 | 模型要求 |
+|------|------|----------|
+| `DECISION` | AI 决策下一步操作 | 需要视觉能力 |
+| `DETECT` | UI 元素检测定位 | 需要视觉能力 |
+| `TEXT` | 文本处理（总结、澄清、搜索） | 纯文本，无视觉要求 |
 
 ## 快速开始
 
@@ -112,7 +140,50 @@ for task in similar:
     print(f"{task['task']} - {'成功' if task['success'] else '失败'}")
 ```
 
-## 检测效果示例
+### 直接调用 AI
+
+```python
+from uiautoagent import Category, chat_completion
+
+# 使用 Category 枚举指定场景（推荐）
+response = chat_completion(
+    category=Category.TEXT,  # 文本处理场景
+    messages=[{"role": "user", "content": "总结这段文本"}],
+    max_tokens=500,
+)
+content = response.choices[0].message.content
+
+# 不同场景会自动使用对应的模型
+decision_response = chat_completion(
+    category=Category.DECISION,  # 决策场景
+    messages=[{"role": "user", "content": "分析这张图片"}],
+    # 注意：决策场景需要提供图片
+)
+```
+
+### Token 统计
+
+```python
+from uiautoagent import TokenTracker
+
+# Token 统计会自动记录
+tracker = TokenTracker()
+
+# 获取所有场景的统计
+stats = TokenTracker.get_stats()
+for category, stat in stats.items():
+    print(f"{category}: {stat.total} tokens")
+
+# 获取总统计
+total = TokenTracker.get_total()
+print(f"总计: {total.total} tokens")
+
+# 计算费用
+input_cost, output_cost, total_cost = TokenTracker.calculate_cost(
+    total.prompt, total.completion
+)
+print(f"费用: ¥{total_cost:.4f}")
+```
 
 AI 视觉定位可以精准识别屏幕上的 UI 元素：
 
@@ -127,8 +198,9 @@ AI 视觉定位可以精准识别屏幕上的 UI 元素：
 ## 要求
 
 - Python 3.10+
-- 支持 Vision 的模型（已测试：doubao-seed-2.0-pro）
-- 兼容 OpenAI API 格式
+- OpenAI 兼容的 API
+  - 视觉场景（`DECISION`、`DETECT`）需要支持 Vision 的模型
+  - 文本场景（`TEXT`）使用普通聊天模型即可
 - Android 需要 ADB
 - iOS 需要 WebDriverAgent 和 [wdapy](https://github.com/openatx/wdapy)，设备列表需要 `idevice_id`（libimobiledevice）或 `tidevice`
 

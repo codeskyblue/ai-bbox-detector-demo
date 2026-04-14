@@ -223,6 +223,7 @@ class DeviceAgent:
         Returns:
             执行的步骤记录
         """
+        step_start = time.time()
         self.step_count += 1
 
         # 截图（记录操作前的屏幕状态）
@@ -238,6 +239,9 @@ class DeviceAgent:
             and action.type != ActionType.FAIL
         )
 
+        # 计算执行耗时
+        elapsed = time.time() - step_start
+
         # 记录步骤
         step = TaskStep(
             step_number=self.step_count,
@@ -251,11 +255,11 @@ class DeviceAgent:
 
         # 日志输出
         status = "✅" if success else "❌"
-        self._log(f"\n[步骤 {self.step_count}] {status}")
-        self._log(f"  动作: {action}")
+        self._log(f"\n[步骤 {self.step_count}] {status} 动作: {action}")
         if action.thought:
-            self._log(f"  思考: {action.thought}")
-        self._log(f"  观察: {observation}")
+            self._log(f"思考: {action.thought}")
+        self._log(f"观察: {observation}")
+        self._log(f"耗时: {elapsed:.2f}s")
 
         return step
 
@@ -268,8 +272,27 @@ class DeviceAgent:
         if path is None:
             path = self.task_dir / "history.json"
 
+        # 从全局TokenTracker获取统计
+        from uiautoagent.ai import TokenTracker
+
+        total_tokens = TokenTracker.get_total()
+        stats_by_category = TokenTracker.get_stats()
+
         data = {
             "total_steps": len(self.history),
+            "total_tokens": {
+                "prompt_tokens": total_tokens.prompt,
+                "completion_tokens": total_tokens.completion,
+                "total_tokens": total_tokens.total,
+            },
+            "tokens_by_category": {
+                k: {
+                    "prompt_tokens": v.prompt,
+                    "completion_tokens": v.completion,
+                    "total_tokens": v.total,
+                }
+                for k, v in stats_by_category.items()
+            },
             "steps": [step.model_dump() for step in self.history],
         }
         Path(path).write_text(
@@ -283,6 +306,18 @@ class DeviceAgent:
     def _save_text_summary(self):
         """保存可读的文本摘要"""
         summary_path = self.task_dir / "summary.txt"
+
+        # 从全局TokenTracker获取统计
+        from uiautoagent.ai import TokenTracker
+
+        total_tokens = TokenTracker.get_total()
+        stats_by_category = TokenTracker.get_stats()
+
+        # 计算费用
+        input_cost, output_cost, total_cost = TokenTracker.calculate_cost(
+            total_tokens.prompt, total_tokens.completion
+        )
+
         lines = [
             "=" * 60,
             f"任务执行摘要 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -290,9 +325,40 @@ class DeviceAgent:
             f"总步骤数: {len(self.history)}",
             "截图目录: screenshots/",
             "",
-            "步骤详情:",
-            "-" * 60,
+            "Token使用统计:",
+            f"  输入Token: {total_tokens.prompt:,}",
+            f"  输出Token: {total_tokens.completion:,}",
+            f"  总计Token: {total_tokens.total:,}",
+            f"  总费用: ¥{total_cost:.4f} (输入:¥{input_cost:.4f}, 输出:¥{output_cost:.4f})",
         ]
+
+        # 按分类显示token统计
+        if stats_by_category:
+            # 分类名称映射
+            category_names = {
+                "decision": "AI决策思考",
+                "clarify": "任务澄清",
+                "summarize": "任务总结",
+            }
+
+            lines.append("")
+            lines.append("按用途分类:")
+            for category, stats in stats_by_category.items():
+                _, _, cat_total_cost = TokenTracker.calculate_cost(
+                    stats.prompt, stats.completion
+                )
+                name = category_names.get(category, category)
+                lines.append(
+                    f"  [{name}] {stats.total:,} tokens (¥{cat_total_cost:.4f}) - 输入:{stats.prompt:,}, 输出:{stats.completion:,}"
+                )
+
+        lines.extend(
+            [
+                "",
+                "步骤详情:",
+                "-" * 60,
+            ]
+        )
 
         for step in self.history:
             status = "✅ 成功" if step.success else "❌ 失败"
@@ -310,12 +376,49 @@ class DeviceAgent:
 
     def print_summary(self):
         """打印任务执行摘要"""
+        # 从全局TokenTracker获取统计
+        from uiautoagent.ai import TokenTracker
+
+        total_tokens = TokenTracker.get_total()
+        stats_by_category = TokenTracker.get_stats()
+
+        # 计算费用
+        _, _, total_cost = TokenTracker.calculate_cost(
+            total_tokens.prompt, total_tokens.completion
+        )
+
         print("\n" + "=" * 50)
         print("📋 任务执行摘要")
         print("=" * 50)
         for step in self.history:
             status = "✅" if step.success else "❌"
             print(f"[{step.step_number}] {status} {step.action}")
+        print("=" * 50)
+
+        # 打印 token 使用统计
+        if total_tokens.total > 0:
+            print(
+                f"📊 Token: {total_tokens.total:,} (输入:{total_tokens.prompt:,}, 输出:{total_tokens.completion:,}) | 💰 费用: ¥{total_cost:.4f}"
+            )
+
+            # 按分类详细统计
+            if stats_by_category:
+                # 分类名称映射
+                category_names = {
+                    "decision": "AI决策思考",
+                    "clarify": "任务澄清",
+                    "summarize": "任务总结",
+                }
+
+                print("\n按用途分类:")
+                for category, stats in stats_by_category.items():
+                    _, _, cat_cost = TokenTracker.calculate_cost(
+                        stats.prompt, stats.completion
+                    )
+                    name = category_names.get(category, category)
+                    print(
+                        f"  [{name}] {stats.total:,} tokens (输入:{stats.prompt:,}, 输出:{stats.completion:,}) | ¥{cat_cost:.4f}"
+                    )
         print("=" * 50)
 
     def get_context_for_ai(self) -> dict[str, Any]:

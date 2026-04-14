@@ -8,11 +8,10 @@ from typing import Type, TypeVar
 
 import json
 
-from openai import OpenAI
 from PIL import Image
 from pydantic import BaseModel, ValidationError
 
-from uiautoagent.ai import get_ai_client, get_ai_model
+from uiautoagent.ai import Category, chat_completion
 
 _T = TypeVar("_T", bound=BaseModel)
 
@@ -90,8 +89,6 @@ def safe_validate_json(
     raw: str | None,
     model_class: Type[_T],
     *,
-    client: OpenAI,
-    model_name: str,
     max_retries: int = 1,
 ) -> _T:
     """
@@ -100,8 +97,6 @@ def safe_validate_json(
     Args:
         raw: 原始 JSON 字符串
         model_class: Pydantic 模型类
-        client: OpenAI 客户端（用于 AI 重新格式化）
-        model_name: 使用的模型名称
         max_retries: AI 重新格式化的最大重试次数
 
     Returns:
@@ -129,21 +124,20 @@ def safe_validate_json(
             k: (v.get("default") if "default" in v else None)
             for k, v in properties.items()
         },
-        ensure_ascii=False,
         indent=2,
     )
 
     for attempt in range(max_retries + 1):
         try:
-            response = client.chat.completions.create(
-                model=model_name,
+            response = chat_completion(
+                category=Category.TEXT,
                 messages=[
                     {
                         "role": "system",
                         "content": f"""你是一个 JSON 修复专家。用户会给你一个格式错误的 JSON 字符串，你需要将其修复为符合指定 schema 的有效 JSON。
 
 目标 schema:
-{json.dumps(schema, ensure_ascii=False, indent=2)}
+{json.dumps(schema, indent=2)}
 
 示例格式:
 {json_example}
@@ -195,15 +189,12 @@ def detect_element(
         image_source: 图片路径
         query: 要查找的元素描述，如"登录按钮"、"搜索框"
     """
-    client = get_ai_client()
-    model_name = get_ai_model()
-
     b64, media_type = _encode_image(image_source)
     img = Image.open(image_source)
     w, h = img.size
 
-    response = client.chat.completions.create(
-        model=model_name,
+    response = chat_completion(
+        category=Category.DETECT,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -230,12 +221,7 @@ def detect_element(
 
     raw = response.choices[0].message.content
     print("Raw:", raw)
-    loc = safe_validate_json(
-        raw,
-        ElementLocation,
-        client=client,
-        model_name=model_name,
-    )
+    loc = safe_validate_json(raw, ElementLocation)
 
     bbox = None
     if loc.found and loc.bbox:
@@ -311,9 +297,6 @@ def detect_elements(
     Returns:
         dict[str, DetectionResult]: key是查询字符串，value是对应的检测结果
     """
-    client = get_ai_client()
-    model_name = get_ai_model()
-
     b64, media_type = _encode_image(image_source)
     img = Image.open(image_source)
     w, h = img.size
@@ -321,8 +304,8 @@ def detect_elements(
     # 构建查询文本
     query_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(queries))
 
-    response = client.chat.completions.create(
-        model=model_name,
+    response = chat_completion(
+        category=Category.DETECT,
         messages=[
             {
                 "role": "system",
@@ -362,9 +345,7 @@ results字段中，key为元素描述，value为该元素的检测结果。
 
     raw = response.choices[0].message.content
     print("Raw multi-detect:", raw)
-    loc = safe_validate_json(
-        raw, MultiElementLocation, client=client, model_name=model_name
-    )
+    loc = safe_validate_json(raw, MultiElementLocation)
 
     # 转换结果
     final_results: dict[str, DetectionResult] = {}

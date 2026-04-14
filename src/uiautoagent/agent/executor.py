@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from uiautoagent import get_ai_client, get_ai_model
+from uiautoagent import Category, chat_completion
 from uiautoagent.agent import AgentConfig, DeviceAgent, Action, ActionType
 from uiautoagent.agent.ai_utils import summarize_task
 from uiautoagent.agent.memory import TaskMemory, get_task_memory
@@ -146,12 +146,16 @@ def build_user_prompt_with_memory(
     task: str, context: dict, memory_reference: str
 ) -> str:
     """构建用户消息（包含历史任务参考）"""
+    from datetime import datetime
+
     history_summary = build_history_summary(context["history"])
     device_info = context["device_info"]
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     return f"""任务：{task}
 
 设备信息：{device_info["model"]} ({device_info["width"]}x{device_info["height"]})
+当前时间：{current_time}
 
 {memory_reference}
 
@@ -170,12 +174,14 @@ def encode_screenshot(screenshot_path: str | Path) -> str:
         return base64.b64encode(f.read()).decode()
 
 
-def call_ai_decision(
-    client, model: str, system_prompt: str, user_prompt: str, screenshot_b64: str
-) -> dict:
-    """调用AI决策API"""
-    response = client.chat.completions.create(
-        model=model,
+def call_ai_decision(system_prompt: str, user_prompt: str, screenshot_b64: str) -> dict:
+    """调用AI决策API
+
+    Returns:
+        决策字典
+    """
+    response = chat_completion(
+        category=Category.DECISION,
         messages=[
             {"role": "system", "content": system_prompt},
             {
@@ -198,7 +204,7 @@ def call_ai_decision(
     if not decision_text:
         raise ValueError("AI返回空响应")
 
-    print(f"🧠 AI思考: {decision_text[:200]}...")
+    print(f"[AI思考] {decision_text[:200]}...")
 
     import json
 
@@ -261,24 +267,27 @@ def handle_task_status(
             print(f"   {result}")
             print(f"\n📸 当前截图: {agent.get_current_screenshot()}")
 
-        agent.save_history()
-        agent.print_summary()
-
-        # 保存成功任务记忆
+        # 先保存任务记忆（会调用summarize，产生token）
         summary = summarize_task(task, agent.history, success=True)
         task_memory.save_task(task, agent.history, success=True, summary=summary)
         print("💾 已保存任务记忆")
+
+        # 然后保存历史和打印统计（包含summarize的token）
+        agent.save_history()
+        agent.print_summary()
 
         return TaskResult(success=True, result=result)
 
     if action.type == ActionType.FAIL:
         print(f"\n❌ AI认为任务无法完成: {action.thought}")
-        agent.save_history()
-        agent.print_summary()
 
-        # 保存失败任务记忆
+        # 先保存任务记忆（会调用summarize，产生token）
         summary = summarize_task(task, agent.history, success=False)
         task_memory.save_task(task, agent.history, success=False, summary=summary)
+
+        # 然后保存历史和打印统计（包含summarize的token）
+        agent.save_history()
+        agent.print_summary()
 
         return TaskResult(success=False, result=action.thought)
 
@@ -307,9 +316,6 @@ def execute_ai_task(agent: DeviceAgent, task: str) -> TaskResult:
     Returns:
         TaskResult: 任务执行结果
     """
-    # 初始化AI客户端
-    client = get_ai_client()
-    model = get_ai_model()
     max_steps = agent.config.max_steps
 
     # 获取任务记忆
@@ -343,9 +349,7 @@ def execute_ai_task(agent: DeviceAgent, task: str) -> TaskResult:
 
         # 调用AI决策
         try:
-            decision = call_ai_decision(
-                client, model, system_prompt, user_prompt, screenshot_b64
-            )
+            decision = call_ai_decision(system_prompt, user_prompt, screenshot_b64)
             action = parse_action_from_decision(decision)
 
             # 执行动作

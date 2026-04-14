@@ -20,10 +20,7 @@ def summarize_task(task: str, history: list, success: bool) -> str:
         Markdown格式的任务总结
     """
     try:
-        from uiautoagent.ai import get_ai_client, get_ai_model
-
-        client = get_ai_client()
-        model = get_ai_model()
+        from uiautoagent.ai import Category, chat_completion
 
         # 构建操作历史摘要
         steps_summary = []
@@ -94,8 +91,8 @@ def summarize_task(task: str, history: list, success: bool) -> str:
 2. 只返回Markdown内容，不要用代码块包裹
 3. 紧凑格式，列表项之间不要空行"""
 
-        response = client.chat.completions.create(
-            model=model,
+        response = chat_completion(
+            category=Category.TEXT,
             messages=[
                 {
                     "role": "system",
@@ -110,6 +107,7 @@ def summarize_task(task: str, history: list, success: bool) -> str:
         content = response.choices[0].message.content
         if not content:
             raise ValueError("AI返回空响应")
+
         return compress_markdown(content)
 
     except Exception as e:
@@ -128,12 +126,10 @@ def clarify_task(task: str) -> str:
         经过AI重新表述的清晰任务描述
     """
     try:
-        from uiautoagent.ai import get_ai_client, get_ai_model
+        from uiautoagent.ai import Category, chat_completion
 
-        client = get_ai_client()
-
-        response = client.chat.completions.create(
-            model=get_ai_model(),
+        response = chat_completion(
+            category=Category.TEXT,
             messages=[
                 {
                     "role": "system",
@@ -151,6 +147,7 @@ def clarify_task(task: str) -> str:
         )
 
         clarified = (response.choices[0].message.content or "").strip()
+
         if clarified and clarified != task:
             print(f"✏️  任务已澄清: {task!r} → {clarified!r}")
             return clarified

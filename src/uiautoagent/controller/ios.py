@@ -99,7 +99,7 @@ class IOSController(DeviceController):
     def swipe_direction(
         self,
         direction: SwipeDirection,
-        ratio: float = 0.5,
+        ratio: float = 0.25,
         duration_ms: int = 300,
     ) -> None:
         """

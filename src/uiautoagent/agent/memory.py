@@ -90,10 +90,7 @@ class TaskMemory:
 
         # 步骤2：使用AI查找相似任务
         try:
-            from uiautoagent.ai import get_ai_client, get_ai_model
-
-            client = get_ai_client()
-            model = get_ai_model()
+            from uiautoagent.ai import Category, chat_completion
 
             # 构建历史任务列表（只返回成功任务）
             successful_tasks = [
@@ -125,8 +122,8 @@ class TaskMemory:
 
 只返回索引号，不要返回任务内容。"""
 
-            response = client.chat.completions.create(
-                model=model,
+            response = chat_completion(
+                category=Category.TEXT,
                 messages=[
                     {"role": "system", "content": "你是一个任务相似度分析专家。"},
                     {"role": "user", "content": prompt},
