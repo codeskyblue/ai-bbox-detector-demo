@@ -26,9 +26,9 @@ cp .env.example .env
 
 ```bash
 # 基础配置
-BASE_URL=https://api.openai.com/v1
+BASE_URL=--openai-compatable--
 API_KEY=sk-xxx
-MODEL_NAME=doubao-seed-2.0-pro
+MODEL_NAME=--suport-vision-model--
 
 # 可选：为不同场景配置不同的模型
 MODEL_PLAN=                # AI规划模型（需要视觉能力）
@@ -50,10 +50,7 @@ SESSION_ID=my-session-123   # 默认自动生成 UUID
 推荐的配置
 
 ```
-# 方案1
-MODEL_NAME=doubao-seed-2.0-pro
-
-# 方案2 (Openrouter)
+# 方案1 (Openrouter)(推荐)
 BASE_URL=https://openrouter.ai/api/v1
 API_KEY=sk-...
 # 由于openrouter不让国外访问，需要配置个国外的代理才行
@@ -64,10 +61,14 @@ MODEL_PROXY=http://localhost:1080
 # z.ai/glm-4.6v       $0.30/M input tokens $0.90/M output tokens
 MODEL_NAME=openai/gpt-5-mini
 MODEL_DETECT=z-ai/glm-4.6v
-
-# 下面这个稍微贵点
+# 下面两个模型稍微贵点
 # openai/gpt-5.4-mini $0.75/M input tokens $4.50/M output tokens
 # z.ai/glm-5v-turbo   $1.20/M input tokens $4/M output tokens
+
+# 方案2 (Doubao)
+BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+API_KEY=...
+MODEL_NAME=doubao-seed-2.0-pro
 ```
 
 
@@ -206,7 +207,7 @@ AI 视觉定位可以精准识别屏幕上的 UI 元素：
 **原始截图**
 ![sample.png](assets/sample.png)
 
-**检测结果** - 查询"登录按钮"
+**检测结果** - 查询"关闭按钮"
 ![result.png](assets/result.png)
 
 ## 要求
