@@ -244,3 +244,19 @@ class IOSController(DeviceController):
             pass
 
         return []
+
+    def app_launch(self, app_id: str) -> None:
+        """启动应用
+
+        Args:
+            app_id: Bundle ID，如 com.tencent.xin
+        """
+        self.client.app_start(app_id)
+
+    def app_stop(self, app_id: str) -> None:
+        """停止应用
+
+        Args:
+            app_id: Bundle ID，如 com.tencent.xin
+        """
+        self.client.app_terminate(app_id)

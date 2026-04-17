@@ -22,6 +22,7 @@ class PlanResponse(BaseModel):
     thought: str = ""
     target: str | None = None
     text: str | None = None
+    app_id: str | None = None
     direction: str | None = None
     swipe_start: str | None = None
     swipe_end: str | None = None
@@ -89,8 +90,10 @@ def get_system_prompt() -> str:
    - 方式2：指定swipe_start和swipe_end来描述起始和结束位置（如从"头像图标"滑动到"设置按钮"）
 4. back - 返回上一页
 5. wait - 等待（需要指定wait_ms毫秒数）
-6. done - 任务完成（当任务已完成时）
-7. fail - 任务失败（当无法继续时）
+6. app_launch - 启动应用（需要指定app_id，Android为包名如"com.tencent.mm"，iOS为Bundle ID如"com.tencent.xin"）
+7. app_stop - 停止应用（需要指定app_id）
+8. done - 任务完成（当任务已完成时）
+9. fail - 任务失败（当无法继续时）
 
 请以JSON格式返回你的决策：
 {
@@ -98,6 +101,7 @@ def get_system_prompt() -> str:
   "thought": "为什么执行这个操作",
   "target": "目标元素描述（仅tap时需要，其他操作省略此字段）",
   "text": "输入文本（仅input时需要，其他操作省略此字段）",
+  "app_id": "应用包名或Bundle ID（仅app_launch/app_stop时需要，其他操作省略此字段）",
   "direction": "滑动方向（仅swipe按方向滑动时需要，值为up/down/left/right之一，其他操作省略此字段）",
   "swipe_start": "滑动起始位置描述（仅swipe按位置描述时需要，与swipe_end配合使用）",
   "swipe_end": "滑动结束位置描述（仅swipe按位置描述时需要，与swipe_start配合使用）",
@@ -115,6 +119,7 @@ def get_system_prompt() -> str:
 注意：
 - 优先参考历史任务的成功步骤
 - 分析屏幕时要仔细，确保能找到目标元素
+- 如果任务需要操作特定应用，优先使用app_launch启动该应用，确保从正确的界面开始
 - 如果找不到元素，可以尝试滑动或返回
 - 任务完成后使用done
 - 无法继续时使用fail
@@ -145,6 +150,8 @@ def build_history_summary(history: list) -> str:
             parts.append(f"目标: {action['target']}")
         if action.get("text"):
             parts.append(f"输入: {action['text']}")
+        if action.get("app_id"):
+            parts.append(f"应用: {action['app_id']}")
         if action.get("direction"):
             parts.append(f"方向: {action['direction']}")
         if action.get("swipe_start") and action.get("swipe_end"):
@@ -160,21 +167,29 @@ def build_history_summary(history: list) -> str:
 
 
 def build_user_prompt_with_memory(
-    task: str, context: dict, memory_reference: str
+    task: str, context: dict, memory_reference: str, knowledge: str | None = None
 ) -> str:
-    """构建用户消息（包含历史任务参考）"""
+    """构建用户消息（包含历史任务参考和背景知识）"""
     from datetime import datetime
 
     history_summary = build_history_summary(context["history"])
     device_info = context["device_info"]
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    knowledge_section = ""
+    if knowledge:
+        knowledge_section = f"""## 背景知识
+以下是用户提供的关于当前任务的背景知识，请优先参考：
+{knowledge}
+
+"""
+
     return f"""任务：{task}
 
 设备信息：{device_info["model"]} ({device_info["width"]}x{device_info["height"]})
 当前时间：{current_time}
 
-{memory_reference}
+{knowledge_section}{memory_reference}
 
 ## 当前任务执行历史
 {history_summary}
@@ -241,6 +256,8 @@ def parse_action_from_plan(plan: PlanResponse) -> Action:
         kwargs["target"] = plan.target
     if plan.text:
         kwargs["text"] = plan.text
+    if plan.app_id:
+        kwargs["app_id"] = plan.app_id
     if plan.direction and plan.direction in ("up", "down", "left", "right"):
         kwargs["direction"] = plan.direction
     if plan.swipe_start:
@@ -316,13 +333,16 @@ def handle_ai_error(agent: DeviceAgent, error: Exception):
     agent._append_step_log(step)
 
 
-def execute_ai_task(agent: DeviceAgent, task: str) -> TaskResult:
+def execute_ai_task(
+    agent: DeviceAgent, task: str, knowledge: str | None = None
+) -> TaskResult:
     """
     使用AI自主执行任务，支持任务记忆复用
 
     Args:
         agent: 设备Agent
         task: 任务描述
+        knowledge: 用户提供的背景知识
 
     Returns:
         TaskResult: 任务执行结果
@@ -354,9 +374,11 @@ def execute_ai_task(agent: DeviceAgent, task: str) -> TaskResult:
         context = agent.get_context_for_ai()
         screenshot_b64 = encode_screenshot(screenshot_path)
 
-        # 构建用户消息（包含历史任务参考）
+        # 构建用户消息（包含历史任务参考和背景知识）
         memory_reference = task_memory.format_for_ai(similar_tasks)
-        user_prompt = build_user_prompt_with_memory(task, context, memory_reference)
+        user_prompt = build_user_prompt_with_memory(
+            task, context, memory_reference, knowledge=knowledge
+        )
 
         # 调用AI决策
         try:
@@ -413,6 +435,7 @@ def run_ai_task(
     max_steps: int = 30,
     verbose: bool = True,
     platform: str = "android",
+    knowledge: str | None = None,
 ) -> TaskResult:
     """
     运行 AI 自主任务 - 便捷函数
@@ -425,6 +448,7 @@ def run_ai_task(
         max_steps: 最大执行步数
         verbose: 是否打印详细日志
         platform: 设备平台，"android" 或 "ios"
+        knowledge: 用户提供的背景知识，帮助AI更好地理解任务
 
     Returns:
         TaskResult: 任务执行结果，包含 success 和 result 字段
@@ -463,6 +487,8 @@ def run_ai_task(
     print(f"📁 任务目录: {agent.task_dir}")
 
     print(f"\n🎯 任务: {task}")
+    if knowledge:
+        print(f"📖 背景知识: {knowledge[:100]}{'...' if len(knowledge) > 100 else ''}")
 
     # 用AI澄清任务描述
     from uiautoagent.agent.ai_utils import clarify_task
@@ -473,7 +499,7 @@ def run_ai_task(
 
     # 执行AI自主任务
     try:
-        return execute_ai_task(agent, task)
+        return execute_ai_task(agent, task, knowledge=knowledge)
     except Exception as e:
         print(f"❌ 任务执行出错: {e}")
         return TaskResult(success=False, result=str(e))

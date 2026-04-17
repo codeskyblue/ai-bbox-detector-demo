@@ -229,6 +229,31 @@ class AndroidController(DeviceController):
                 devices.append(serial)
         return devices
 
+    def app_launch(self, app_id: str) -> None:
+        """启动应用
+
+        Args:
+            app_id: 应用包名，如 com.tencent.mm
+        """
+        output = self._run_adb(
+            "shell", "cmd", "package", "resolve-activity",
+            "--brief", "-c", "android.intent.category.LAUNCHER", app_id,
+        )
+        for line in output.splitlines():
+            line = line.strip()
+            if "/" in line and app_id in line:
+                self._run_adb("shell", "am", "start", "-n", line)
+                return
+        raise RuntimeError(f"无法解析应用 {app_id} 的主Activity: {output}")
+
+    def app_stop(self, app_id: str) -> None:
+        """停止应用
+
+        Args:
+            app_id: 应用包名，如 com.tencent.mm
+        """
+        self._run_adb("shell", "am", "force-stop", app_id)
+
 
 def find_and_tap(
     controller: AndroidController,

@@ -89,6 +89,7 @@ def demo_ai_assisted_task(
     task: str = "修改昵称为kitty",
     platform: str = "android",
     serial: str | None = None,
+    knowledge: str | None = None,
 ):
     """
     演示AI辅助任务执行 - AI自主决策并完成任务
@@ -97,8 +98,9 @@ def demo_ai_assisted_task(
         task: 要执行的任务描述
         platform: 设备平台
         serial: 设备序列号/UDID
+        knowledge: 用户提供的背景知识
     """
-    run_ai_task(task, serial=serial, platform=platform)
+    run_ai_task(task, serial=serial, platform=platform, knowledge=knowledge)
 
 
 def demo_find_and_click(
@@ -176,15 +178,40 @@ def main():
         default=30,
         help="最大执行步数",
     )
+    parser.add_argument(
+        "--knowledge-file",
+        "-kf",
+        default=None,
+        help="背景知识文件路径，提供任务相关的背景信息以提高执行成功率",
+    )
     args = parser.parse_args()
 
     if not check_all_models_available():
         return
 
+    # 读取背景知识文件
+    knowledge = None
+    if args.knowledge_file:
+        from pathlib import Path
+
+        kpath = Path(args.knowledge_file)
+        if not kpath.exists():
+            print(f"❌ 背景知识文件不存在: {kpath}")
+            return
+        knowledge = kpath.read_text(encoding="utf-8").strip()
+        if not knowledge:
+            print("⚠️  背景知识文件为空，已忽略")
+            knowledge = None
+
     if args.mode == "manual":
         demo_manual_control(platform=args.platform, serial=args.serial)
     elif args.mode == "ai":
-        demo_ai_assisted_task(args.task, platform=args.platform, serial=args.serial)
+        demo_ai_assisted_task(
+            args.task,
+            platform=args.platform,
+            serial=args.serial,
+            knowledge=knowledge,
+        )
     else:
         demo_find_and_click(
             target=args.task, platform=args.platform, serial=args.serial

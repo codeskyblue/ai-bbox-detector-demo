@@ -91,10 +91,28 @@ uv run uiautoagent -m ai -t "修改昵称为 kitty"
 # 指定iOS设备
 uv run uiautoagent -m ai -t "修改昵称为 kitty" -p ios
 
+# 提供背景知识提高成功率
+uv run uiautoagent -m ai -t "修改昵称为 kitty" -kf knowledge.txt
+
 # 其他模式
 uv run uiautoagent -m find    # 查找并点击
 uv run uiautoagent -m manual  # 手动控制
 ```
+
+### 背景知识文件
+
+通过 `--knowledge-file` (`-kf`) 参数指定一个文本文件，为 AI 提供任务相关的背景信息，帮助 AI 更准确地定位元素和规划操作路径。
+
+知识文件示例 (`knowledge.txt`)：
+```
+微信修改昵称路径：点击底部"我" → 点击头像区域 → 点击"昵称" → 修改后点击"保存"
+设置按钮在右上角，是一个齿轮图标
+```
+
+适用于以下场景：
+- 用户知道具体操作路径，希望 AI 直接参考
+- 应用 UI 比较复杂，需要提供元素位置提示
+- 任务需要特定领域的知识（如某个 App 的特殊操作方式）
 
 启动时会自动检查所有配置模型的可用性：
 
@@ -131,6 +149,12 @@ if result.success:
 else:
     print(f"任务失败: {result.result}")
 
+# 提供背景知识提高成功率
+result = run_ai_task(
+    "修改昵称为 kitty",
+    knowledge="微信修改昵称路径：点击底部'我' → 点击头像 → 点击'昵称' → 修改后点'保存'",
+)
+
 # 如果任务需要返回观察结果（如"查看有多少个好友"）
 result = run_ai_task("查看有多少个好友")
 if result.success:
@@ -160,6 +184,8 @@ controller.tap(500, 1000)
 controller.swipe_direction(SwipeDirection.UP)
 controller.input_text("hello")
 controller.back()
+controller.app_launch("com.tencent.mm")  # 启动微信
+controller.app_stop("com.tencent.mm")    # 停止微信
 
 # 控制iOS设备
 controller = IOSController()  # 自动检测USB设备
@@ -167,6 +193,8 @@ controller.tap(500, 1000)
 controller.swipe_direction(SwipeDirection.UP)
 controller.input_text("hello")
 controller.home()
+controller.app_launch("com.tencent.xin")  # 启动微信
+controller.app_stop("com.tencent.xin")    # 停止微信
 ```
 
 ### 直接调用 AI

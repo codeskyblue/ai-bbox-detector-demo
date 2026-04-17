@@ -26,6 +26,8 @@ class ActionType(str, Enum):
     WAIT = "wait"  # 等待
     DONE = "done"  # 任务完成
     FAIL = "fail"  # 任务失败
+    APP_LAUNCH = "app_launch"  # 启动应用
+    APP_STOP = "app_stop"  # 停止应用
 
 
 class ActionDetail(BaseModel):
@@ -86,6 +88,12 @@ class RecordingController(DeviceController):
     def press_key(self, keycode: int) -> None:
         self._inner.press_key(keycode)
 
+    def app_launch(self, app_id: str) -> None:
+        self._inner.app_launch(app_id)
+
+    def app_stop(self, app_id: str) -> None:
+        self._inner.app_stop(app_id)
+
     def screenshot(self, output_path: str | Path) -> Path:
         return self._inner.screenshot(output_path)
 
@@ -110,6 +118,7 @@ class Action(BaseModel):
     target: str | None = None  # 目标元素描述（tap用）
     position: tuple[int, int] | None = None  # 具体坐标
     text: str | None = None  # 输入的文本
+    app_id: str | None = None  # 应用包名/Bundle ID（launch_app/stop_app用）
     direction: SwipeDirection | None = None  # 滑动方向
     swipe_start: str | None = None  # 滑动起始位置描述
     swipe_end: str | None = None  # 滑动结束位置描述
@@ -138,6 +147,10 @@ class Action(BaseModel):
             return f"✅ 完成: {self.thought}" if self.thought else "✅ 完成"
         elif self.type == ActionType.FAIL:
             return f"❌ 失败: {self.thought}" if self.thought else "❌ 失败"
+        elif self.type == ActionType.APP_LAUNCH:
+            return f"启动应用: {self.app_id}"
+        elif self.type == ActionType.APP_STOP:
+            return f"停止应用: {self.app_id}"
         return self.type
 
 
@@ -297,6 +310,18 @@ class DeviceAgent:
             elif action.type == ActionType.WAIT:
                 time.sleep(action.wait_ms / 1000)
                 return f"已等待 {action.wait_ms}ms"
+
+            elif action.type == ActionType.APP_LAUNCH:
+                if action.app_id:
+                    self.controller.app_launch(action.app_id)
+                    return f"已启动应用: {action.app_id}"
+                return "未提供应用包名"
+
+            elif action.type == ActionType.APP_STOP:
+                if action.app_id:
+                    self.controller.app_stop(action.app_id)
+                    return f"已停止应用: {action.app_id}"
+                return "未提供应用包名"
 
             elif action.type in (ActionType.DONE, ActionType.FAIL):
                 return action.thought or ""

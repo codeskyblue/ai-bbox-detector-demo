@@ -73,6 +73,24 @@ class DeviceController(ABC):
         """列出所有已连接的设备"""
         pass
 
+    @abstractmethod
+    def app_launch(self, app_id: str) -> None:
+        """启动应用
+
+        Args:
+            app_id: Android 为包名（如 com.tencent.mm），iOS 为 Bundle ID（如 com.tencent.xin）
+        """
+        pass
+
+    @abstractmethod
+    def app_stop(self, app_id: str) -> None:
+        """停止应用
+
+        Args:
+            app_id: Android 为包名（如 com.tencent.mm），iOS 为 Bundle ID（如 com.tencent.xin）
+        """
+        pass
+
     # 便捷方法
     def tap_bbox(self, bbox: BBox) -> None:
         """点击bbox的中心点"""

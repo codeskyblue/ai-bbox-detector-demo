@@ -207,14 +207,14 @@ def generate_html_report(
 
         # AI 详细信息（可折叠）
         ai_detail_parts = []
-        if step.ai_response:
-            ai_detail_parts.append(("AI 响应", html.escape(step.ai_response)))
         if step.ai_system_prompt:
             ai_detail_parts.append(
                 ("System Prompt", html.escape(step.ai_system_prompt))
             )
         if step.ai_user_prompt:
             ai_detail_parts.append(("User Prompt", html.escape(step.ai_user_prompt)))
+        if step.ai_response:
+            ai_detail_parts.append(("Assistant Response", html.escape(step.ai_response)))
 
         ai_response_html = ""
         if ai_detail_parts:
