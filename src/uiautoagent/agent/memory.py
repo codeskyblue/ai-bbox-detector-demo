@@ -43,23 +43,27 @@ class TaskMemory:
     def _save_memories(self):
         """保存记忆到文件"""
         with self._lock:
-            self.memory_file.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                "updated_at": datetime.now().isoformat(),
-                "total_tasks": len(self._memories),
-                "tasks": self._memories,
-            }
-            # yaml会自动将多行字符串保存为块样式标量（|- 或 |+）
-            self.memory_file.write_text(
-                yaml.dump(
-                    data,
-                    allow_unicode=True,
-                    sort_keys=False,
-                    default_flow_style=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
+            self._write_memories_to_file()
+
+    def _write_memories_to_file(self):
+        """将当前记忆写入文件（调用方需保证线程安全）"""
+        self.memory_file.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "updated_at": datetime.now().isoformat(),
+            "total_tasks": len(self._memories),
+            "tasks": self._memories,
+        }
+        # yaml会自动将多行字符串保存为块样式标量（|- 或 |+）
+        self.memory_file.write_text(
+            yaml.dump(
+                data,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     def find_similar_tasks(self, task: str, limit: int = 3) -> List[dict]:
         """
@@ -192,7 +196,7 @@ class TaskMemory:
 
         with self._lock:
             self._memories.append(memory)
-            self._save_memories()
+            self._write_memories_to_file()
 
     def format_for_ai(self, similar_tasks: list[dict]) -> str:
         """将相似任务格式化为AI可读的参考信息"""
