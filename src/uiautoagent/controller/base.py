@@ -92,6 +92,15 @@ class DeviceController(ABC):
         pass
 
     # 便捷方法
+    def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
+        """长按指定坐标"""
+        self.swipe(x, y, x, y, duration_ms)
+
+    def app_reboot(self, app_id: str) -> None:
+        """重启应用（先停止再启动）"""
+        self.app_stop(app_id)
+        self.app_launch(app_id)
+
     def tap_bbox(self, bbox: BBox) -> None:
         """点击bbox的中心点"""
         x, y = bbox.center

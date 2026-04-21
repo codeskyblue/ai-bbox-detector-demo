@@ -20,6 +20,7 @@ class ActionType(str, Enum):
     """动作类型"""
 
     TAP = "tap"  # 点击元素
+    LONG_PRESS = "long_press"  # 长按元素
     INPUT = "input"  # 输入文本
     SWIPE = "swipe"  # 滑动
     BACK = "back"  # 返回
@@ -28,6 +29,7 @@ class ActionType(str, Enum):
     FAIL = "fail"  # 任务失败
     APP_LAUNCH = "app_launch"  # 启动应用
     APP_STOP = "app_stop"  # 停止应用
+    APP_REBOOT = "app_reboot"  # 重启应用
 
 
 class ActionDetail(BaseModel):
@@ -94,6 +96,13 @@ class RecordingController(DeviceController):
     def app_stop(self, app_id: str) -> None:
         self._inner.app_stop(app_id)
 
+    def app_reboot(self, app_id: str) -> None:
+        self._inner.app_reboot(app_id)
+
+    def long_press(self, x: int, y: int, duration_ms: int = 800) -> None:
+        self.last_detail = ActionDetail(tap_position=(x, y))
+        self._inner.long_press(x, y, duration_ms)
+
     def screenshot(self, output_path: str | Path) -> Path:
         return self._inner.screenshot(output_path)
 
@@ -120,6 +129,7 @@ class Action(BaseModel):
     position: tuple[int, int] | None = None  # 具体坐标
     text: str | None = None  # 输入的文本
     app_id: str | None = None  # 应用包名/Bundle ID（launch_app/stop_app用）
+    long_press_ms: int = 800  # 长按时间（毫秒）
     direction: SwipeDirection | None = None  # 滑动方向
     swipe_start: str | None = None  # 滑动起始位置描述
     swipe_end: str | None = None  # 滑动结束位置描述
@@ -134,6 +144,10 @@ class Action(BaseModel):
         if self.type == ActionType.TAP:
             pos = f"@{self.position}" if self.position else ""
             return f"点击: {self.target}{pos}"
+        elif self.type == ActionType.LONG_PRESS:
+            pos = f"@{self.position}" if self.position else ""
+            target = self.target or "坐标"
+            return f"长按: {target}{pos} ({self.long_press_ms}ms)"
         elif self.type == ActionType.INPUT:
             return f"输入: {self.text}"
         elif self.type == ActionType.SWIPE:
@@ -152,6 +166,8 @@ class Action(BaseModel):
             return f"启动应用: {self.app_id}"
         elif self.type == ActionType.APP_STOP:
             return f"停止应用: {self.app_id}"
+        elif self.type == ActionType.APP_REBOOT:
+            return f"重启应用: {self.app_id}"
         return self.type
 
 
@@ -281,6 +297,22 @@ class DeviceAgent:
                         return f"已点击: {result.description or action.target}"
                     return f"未找到元素: {action.target}"
 
+            elif action.type == ActionType.LONG_PRESS:
+                if action.position:
+                    x, y = action.position
+                    self.controller.long_press(x, y, action.long_press_ms)
+                    return f"已长按坐标 ({x}, {y}) {action.long_press_ms}ms"
+                elif action.target:
+                    from uiautoagent.detector import detect_element
+
+                    result = detect_element(screenshot_path, action.target)
+                    if not result.found or not result.bbox:
+                        return f"未找到元素: {action.target}"
+                    x, y = result.bbox.center
+                    self.controller.long_press(x, y, action.long_press_ms)
+                    return f"已长按: {result.description or action.target} ({action.long_press_ms}ms)"
+                return "未提供长按参数（坐标或目标元素）"
+
             elif action.type == ActionType.INPUT:
                 if action.text:
                     self.controller.input_text(action.text)
@@ -322,6 +354,12 @@ class DeviceAgent:
                 if action.app_id:
                     self.controller.app_stop(action.app_id)
                     return f"已停止应用: {action.app_id}"
+                return "未提供应用包名"
+
+            elif action.type == ActionType.APP_REBOOT:
+                if action.app_id:
+                    self.controller.app_reboot(action.app_id)
+                    return f"已重启应用: {action.app_id}"
                 return "未提供应用包名"
 
             elif action.type in (ActionType.DONE, ActionType.FAIL):

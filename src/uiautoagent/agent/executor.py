@@ -24,6 +24,7 @@ class PlanResponse(BaseModel):
     target: str | None = None
     text: str | None = None
     app_id: str | None = None
+    long_press_ms: int | None = Field(default=None, ge=0)
     direction: str | None = None
     swipe_start: str | None = None
     swipe_end: str | None = None
@@ -85,31 +86,34 @@ def get_system_prompt() -> str:
 
 可用操作类型：
 1. tap - 点击屏幕上的元素（需要指定target描述元素，如"搜索按钮"）
-2. input - 输入文本（需要指定text内容）
-3. swipe - 滑动屏幕
+2. long_press - 长按元素（需要指定target；可选long_press_ms）
+3. input - 输入文本（需要指定text内容）
+4. swipe - 滑动屏幕
    - 方式1：指定direction: up/down/left/right （适用于整体的滑动，区域滑动请使用方式2）
    - 方式2：指定swipe_start和swipe_end来描述起始和结束位置（如从"头像图标"滑动到"设置按钮"）
-4. back - 返回上一页
-5. wait - 等待（需要指定wait_ms毫秒数）
-6. app_launch - 启动应用（需要指定app_id，Android为包名如"com.tencent.mm"，iOS为Bundle ID如"com.tencent.xin"）
-7. app_stop - 停止应用（需要指定app_id）
-8. done - 任务完成（当任务已完成时）
-9. fail - 任务失败（当无法继续时）
+5. back - 返回上一页
+6. wait - 等待（需要指定wait_ms毫秒数）
+7. app_launch - 启动应用（需要指定app_id，Android为包名如"com.tencent.mm"，iOS为Bundle ID如"com.tencent.xin"）
+8. app_stop - 停止应用（需要指定app_id）
+9. app_reboot - 重启应用（需要指定app_id）
+10. done - 任务完成（当任务已完成时）
+11. fail - 任务失败（当无法继续时）
 
 请以JSON格式返回你的决策：
 {
   "thought": "为什么执行这个操作",
   "log": "简洁说明为什么做和做了什么，格式如：为了进入搜索页面，点击了搜索按钮",
   "type": "操作类型",
-  "target": "目标元素描述（仅tap时需要，其他操作省略此字段）",
+  "target": "目标元素描述（tap/long_press时可用，其他操作省略此字段）",
   "text": "输入文本（仅input时需要，其他操作省略此字段）",
-  "app_id": "应用包名或Bundle ID（仅app_launch/app_stop时需要，其他操作省略此字段）",
+  "app_id": "应用包名或Bundle ID（仅app_launch/app_stop/app_reboot时需要，其他操作省略此字段）",
+  "long_press_ms": "长按毫秒数（仅long_press时可选，默认800，其他操作省略此字段）",
   "direction": "滑动方向（仅swipe按方向滑动时需要，值为up/down/left/right之一，其他操作省略此字段）",
   "swipe_start": "滑动起始位置描述（仅swipe按位置描述时需要，与swipe_end配合使用）",
   "swipe_end": "滑动结束位置描述（仅swipe按位置描述时需要，与swipe_start配合使用）",
-  "wait_ms": 等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
-  "return_result": true（仅done时需要，表示任务需要返回观察结果）
-  "result": "任务返回的结果或答案（仅done时需要）
+  "wait_ms": "等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
+  "return_result": "是否返回观察结果（仅done时需要）",
+  "result": "任务返回的结果或答案（仅done时需要）"
 }
 
 重要：
@@ -164,8 +168,8 @@ def build_history_summary(history: list) -> str:
         #     parts.append(f"等待: {action['wait_ms']}ms")
 
         details = ", ".join(parts)
-        # obs = f" → {h['observation']}" if h.get("observation") else ""
-        lines.append(f"[步骤{h['step']}] {status} {details}{obs}")
+        obs_suffix = f" → {h['observation']}" if h.get("observation") else ""
+        lines.append(f"[步骤{h['step']}] {status} {details}{obs_suffix}")
 
     return "\n".join(lines)
 
@@ -263,6 +267,8 @@ def parse_action_from_plan(plan: PlanResponse) -> Action:
         kwargs["text"] = plan.text
     if plan.app_id:
         kwargs["app_id"] = plan.app_id
+    if action_type == ActionType.LONG_PRESS and plan.long_press_ms is not None:
+        kwargs["long_press_ms"] = plan.long_press_ms
     if plan.direction and plan.direction in ("up", "down", "left", "right"):
         kwargs["direction"] = plan.direction
     if plan.swipe_start:

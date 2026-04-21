@@ -181,20 +181,24 @@ from uiautoagent import AndroidController, IOSController, SwipeDirection
 # 控制Android设备
 controller = AndroidController()
 controller.tap(500, 1000)
+controller.long_press(500, 1000, duration_ms=1200)
 controller.swipe_direction(SwipeDirection.UP)
 controller.input_text("hello")
 controller.back()
 controller.app_launch("com.tencent.mm")  # 启动微信
 controller.app_stop("com.tencent.mm")    # 停止微信
+controller.app_reboot("com.tencent.mm")  # 重启微信
 
 # 控制iOS设备
 controller = IOSController()  # 自动检测USB设备
 controller.tap(500, 1000)
+controller.long_press(500, 1000, duration_ms=1200)
 controller.swipe_direction(SwipeDirection.UP)
 controller.input_text("hello")
 controller.home()
 controller.app_launch("com.tencent.xin")  # 启动微信
 controller.app_stop("com.tencent.xin")    # 停止微信
+controller.app_reboot("com.tencent.xin")  # 重启微信
 ```
 
 ### 直接调用 AI
