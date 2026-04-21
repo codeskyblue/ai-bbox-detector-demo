@@ -107,13 +107,13 @@ def get_system_prompt() -> str:
   "target": "目标元素描述（tap/long_press时可用，其他操作省略此字段）",
   "text": "输入文本（仅input时需要，其他操作省略此字段）",
   "app_id": "应用包名或Bundle ID（仅app_launch/app_stop/app_reboot时需要，其他操作省略此字段）",
-  "long_press_ms": 长按毫秒数（仅long_press时可选，默认800，其他操作省略此字段）,
+  "long_press_ms": "长按毫秒数（仅long_press时可选，默认800，其他操作省略此字段）",
   "direction": "滑动方向（仅swipe按方向滑动时需要，值为up/down/left/right之一，其他操作省略此字段）",
   "swipe_start": "滑动起始位置描述（仅swipe按位置描述时需要，与swipe_end配合使用）",
   "swipe_end": "滑动结束位置描述（仅swipe按位置描述时需要，与swipe_start配合使用）",
-  "wait_ms": 等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
-  "return_result": true（仅done时需要，表示任务需要返回观察结果）
-  "result": "任务返回的结果或答案（仅done时需要）
+  "wait_ms": "等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
+  "return_result": "true（仅done时需要，表示任务需要返回观察结果）",
+  "result": "任务返回的结果或答案（仅done时需要）"
 }
 
 重要：
@@ -168,7 +168,8 @@ def build_history_summary(history: list) -> str:
         #     parts.append(f"等待: {action['wait_ms']}ms")
 
         details = ", ".join(parts)
-        lines.append(f"[步骤{h['step']}] {status} {details}")
+        obs = f" → {h['observation']}" if h.get("observation") else ""
+        lines.append(f"[步骤{h['step']}] {status} {details}{obs}")
 
     return "\n".join(lines)
 
