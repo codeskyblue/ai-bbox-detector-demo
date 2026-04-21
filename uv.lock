@@ -1292,6 +1292,7 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pytest-mock" },
     { name = "ruff" },
     { name = "ruff-lsp" },
 ]
@@ -1314,6 +1315,7 @@ provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pytest-mock", specifier = ">=3.15.1" },
     { name = "ruff", specifier = ">=0.15.10" },
     { name = "ruff-lsp", specifier = ">=0.0.62" },
 ]

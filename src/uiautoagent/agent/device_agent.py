@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from uiautoagent.controller.base import DeviceController, SwipeDirection
 from uiautoagent.types import TokenUsage
@@ -35,15 +35,14 @@ class ActionType(str, Enum):
 class ActionDetail(BaseModel):
     """操作详情（坐标等可视化信息）"""
 
+    model_config = ConfigDict(use_enum_values=True)
+
     tap_position: tuple[int, int] | None = None
     tap_bbox: tuple[int, int, int, int] | None = None  # (x1, y1, x2, y2)
     swipe_start: tuple[int, int] | None = None
     swipe_end: tuple[int, int] | None = None
     swipe_direction: SwipeDirection | None = None
     is_back: bool = False
-
-    class Config:
-        use_enum_values = True
 
 
 class RecordingController(DeviceController):
@@ -122,6 +121,8 @@ class RecordingController(DeviceController):
 class Action(BaseModel):
     """执行的动作"""
 
+    model_config = ConfigDict(use_enum_values=True)
+
     type: ActionType
     thought: str  # 为什么要执行这个动作
     log: str = ""  # 简洁描述做了什么操作
@@ -136,9 +137,6 @@ class Action(BaseModel):
     wait_ms: int = 1000  # 等待时间
     return_result: bool = False  # 是否返回当前屏幕的观察结果
     result: str | None = None  # 任务返回的结果/答案
-
-    class Config:
-        use_enum_values = True
 
     def __str__(self) -> str:
         if self.type == ActionType.TAP:
@@ -174,6 +172,8 @@ class Action(BaseModel):
 class TaskStep(BaseModel):
     """任务执行步骤记录"""
 
+    model_config = ConfigDict(use_enum_values=True)
+
     step_number: int
     screenshot_path: str
     action: Action
@@ -188,9 +188,6 @@ class TaskStep(BaseModel):
     ai_user_prompt: str | None = None  # AI 用户提示词（不含截图）
     screenshot_after_path: str | None = None  # 操作后截图路径
     image_similarity: float | None = None  # 操作前后图片相似度 (0-1)
-
-    class Config:
-        use_enum_values = True
 
 
 class AgentConfig(BaseModel):

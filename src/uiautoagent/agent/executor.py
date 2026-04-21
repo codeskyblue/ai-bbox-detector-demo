@@ -5,33 +5,19 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 from uiautoagent import Category, chat_completion
 from uiautoagent.agent import AgentConfig, DeviceAgent, Action, ActionType
 from uiautoagent.agent.ai_utils import summarize_task
 from uiautoagent.agent.memory import TaskMemory, get_task_memory
+from uiautoagent.agent.plan import (
+    PlanResponse,
+    get_action_examples_prompt,
+    parse_plan_response,
+)
 from uiautoagent.controller import AndroidController, IOSController
-from uiautoagent.detector.bbox_detector import safe_validate_json
 from uiautoagent.types import TokenUsage
-
-
-class PlanResponse(BaseModel):
-    """AI 规划响应结构"""
-
-    type: str
-    thought: str = ""
-    log: str = ""
-    target: str | None = None
-    text: str | None = None
-    app_id: str | None = None
-    long_press_ms: int | None = Field(default=None, ge=0)
-    direction: str | None = None
-    swipe_start: str | None = None
-    swipe_end: str | None = None
-    wait_ms: int = Field(default=1000, ge=0)
-    return_result: bool = False
-    result: str | None = None
 
 
 def _setup_android_device(serial: str | None) -> tuple:
@@ -68,16 +54,16 @@ def _setup_ios_device(udid: str | None) -> tuple:
 class TaskResult(BaseModel):
     """AI任务执行结果"""
 
+    model_config = ConfigDict(use_enum_values=True)
+
     success: bool  # 任务是否成功完成
     result: str | None = None  # 任务执行结果（如"有5个好友"），失败时为错误信息
-
-    class Config:
-        use_enum_values = True
 
 
 def get_system_prompt() -> str:
     """获取系统提示词"""
-    return """你是一个手机操作专家。用户会给你一个任务和当前手机屏幕截图，你需要分析屏幕并决定下一步操作。
+    examples = get_action_examples_prompt()
+    return f"""你是一个手机操作专家。用户会给你一个任务和当前手机屏幕截图，你需要分析屏幕并决定下一步操作。
 
 ## 利用历史经验
 <historical_tasks>标签内的内容是相似历史任务的执行步骤参考，请参考这些成功经验：
@@ -86,45 +72,19 @@ def get_system_prompt() -> str:
 - 注意历史任务中的关键步骤顺序
 - 标签外的内容是当前任务，不要被历史任务干扰
 
-可用操作类型：
-1. tap - 点击屏幕上的元素（需要指定target描述元素，如"搜索按钮"）
-2. long_press - 长按元素（需要指定target；可选long_press_ms）
-3. input - 输入文本（需要指定text内容）
-4. swipe - 滑动屏幕
-   - 方式1：指定direction: up/down/left/right （适用于整体的滑动，区域滑动请使用方式2）
-   - 方式2：指定swipe_start和swipe_end来描述起始和结束位置（如从"头像图标"滑动到"设置按钮"）
-5. back - 返回上一页
-6. wait - 等待（需要指定wait_ms毫秒数）
-7. app_launch - 启动应用（需要指定app_id，Android为包名如"com.tencent.mm"，iOS为Bundle ID如"com.tencent.xin"）
-8. app_stop - 停止应用（需要指定app_id）
-9. app_reboot - 重启应用（需要指定app_id）
-10. done - 任务完成（当任务已完成时）
-11. fail - 任务失败（当无法继续时）
+## 可用操作类型及示例
 
-请以JSON格式返回你的决策：
-{
-  "thought": "为什么执行这个操作",
-  "log": "简洁说明一下要做的事情",
-  "type": "操作类型",
-  "target": "目标元素描述（tap/long_press时可用，其他操作省略此字段）",
-  "text": "输入文本（仅input时需要，其他操作省略此字段）",
-  "app_id": "应用包名或Bundle ID（仅app_launch/app_stop/app_reboot时需要，其他操作省略此字段）",
-  "long_press_ms": "长按毫秒数（仅long_press时可选，默认800，其他操作省略此字段）",
-  "direction": "滑动方向（仅swipe按方向滑动时需要，值为up/down/left/right之一，其他操作省略此字段）",
-  "swipe_start": "滑动起始位置描述（仅swipe按位置描述时需要，与swipe_end配合使用）",
-  "swipe_end": "滑动结束位置描述（仅swipe按位置描述时需要，与swipe_start配合使用）",
-  "wait_ms": "等待毫秒数（仅wait时需要，默认1000，其他操作省略此字段）",
-  "return_result": "是否返回观察结果（仅done时需要）",
-  "result": "任务返回的结果或答案（仅done时需要）"
-}
+{examples}
 
-重要：
+## 重要说明
+
+**字段使用规则：**
 - 只包含你使用的操作类型所需的字段，不要包含空字符串或null值
-- 例如：tap操作只需要type、thought、target三个字段
+- 每种操作类型只需要必需的字段，参考上面的示例
 - swipe操作可以选择direction或swipe_start+swipe_end，不要同时提供
 - 当任务需要返回观察结果时，done操作必须包含return_result和result字段
 
-注意：
+**注意事项：**
 - 优先参考历史任务的成功步骤
 - 分析屏幕时要仔细，确保能找到目标元素
 - 如果任务需要操作特定应用，优先使用app_launch启动该应用，确保从正确的界面开始
@@ -259,41 +219,117 @@ def call_ai_plan(
 
     print(f"[AI思考] {plan_text[:200]}...")
 
-    return safe_validate_json(plan_text, PlanResponse)
+    return parse_plan_response(plan_text)
 
 
 def parse_action_from_plan(plan: PlanResponse) -> Action:
     """从AI规划解析出Action对象"""
-    action_type = ActionType(plan.type if plan.type else "fail")
+    # 使用 match/case 根据不同类型提取特定参数
+    match plan:
+        # Tap 操作 - 需要 target
+        case plan if plan.type == "tap":
+            return Action(
+                type=ActionType.TAP,
+                thought=plan.thought,
+                log=plan.log,
+                target=plan.target,
+            )
 
-    kwargs: dict = {
-        "type": action_type,
-        "thought": plan.thought or "",
-        "log": plan.log or "",
-    }
+        # LongPress 操作 - 需要 target，可选 long_press_ms
+        case plan if plan.type == "long_press":
+            return Action(
+                type=ActionType.LONG_PRESS,
+                thought=plan.thought,
+                log=plan.log,
+                target=plan.target,
+                long_press_ms=plan.long_press_ms or 800,
+            )
 
-    if plan.target:
-        kwargs["target"] = plan.target
-    if plan.text:
-        kwargs["text"] = plan.text
-    if plan.app_id:
-        kwargs["app_id"] = plan.app_id
-    if action_type == ActionType.LONG_PRESS and plan.long_press_ms is not None:
-        kwargs["long_press_ms"] = plan.long_press_ms
-    if plan.direction and plan.direction in ("up", "down", "left", "right"):
-        kwargs["direction"] = plan.direction
-    if plan.swipe_start:
-        kwargs["swipe_start"] = plan.swipe_start
-    if plan.swipe_end:
-        kwargs["swipe_end"] = plan.swipe_end
-    if plan.wait_ms:
-        kwargs["wait_ms"] = plan.wait_ms
-    if plan.return_result:
-        kwargs["return_result"] = True
-    if plan.result:
-        kwargs["result"] = plan.result
+        # Input 操作 - 需要 text
+        case plan if plan.type == "input":
+            return Action(
+                type=ActionType.INPUT,
+                thought=plan.thought,
+                log=plan.log,
+                text=plan.text,
+            )
 
-    return Action(**kwargs)
+        # Swipe 操作 - direction 或 swipe_start/swipe_end
+        case plan if plan.type == "swipe":
+            kwargs = {
+                "type": ActionType.SWIPE,
+                "thought": plan.thought,
+                "log": plan.log,
+            }
+            if plan.direction:
+                kwargs["direction"] = plan.direction
+            if plan.swipe_start:
+                kwargs["swipe_start"] = plan.swipe_start
+            if plan.swipe_end:
+                kwargs["swipe_end"] = plan.swipe_end
+            return Action(**kwargs)
+
+        # Wait 操作 - 可选 wait_ms
+        case plan if plan.type == "wait":
+            return Action(
+                type=ActionType.WAIT,
+                thought=plan.thought,
+                log=plan.log,
+                wait_ms=plan.wait_ms,
+            )
+
+        # AppLaunch 操作 - 需要 app_id
+        case plan if plan.type == "app_launch":
+            return Action(
+                type=ActionType.APP_LAUNCH,
+                thought=plan.thought,
+                log=plan.log,
+                app_id=plan.app_id,
+            )
+
+        # AppStop 操作 - 需要 app_id
+        case plan if plan.type == "app_stop":
+            return Action(
+                type=ActionType.APP_STOP,
+                thought=plan.thought,
+                log=plan.log,
+                app_id=plan.app_id,
+            )
+
+        # AppReboot 操作 - 需要 app_id
+        case plan if plan.type == "app_reboot":
+            return Action(
+                type=ActionType.APP_REBOOT,
+                thought=plan.thought,
+                log=plan.log,
+                app_id=plan.app_id,
+            )
+
+        # Done 操作 - 可选 return_result 和 result
+        case plan if plan.type == "done":
+            return Action(
+                type=ActionType.DONE,
+                thought=plan.thought,
+                log=plan.log,
+                return_result=plan.return_result,
+                result=plan.result,
+            )
+
+        # Back 操作 - 无额外参数
+        case plan if plan.type == "back":
+            return Action(
+                type=ActionType.BACK,
+                thought=plan.thought,
+                log=plan.log,
+            )
+
+        # Fail 操作 - 无额外参数
+        case _:
+            return Action(
+                type=ActionType.FAIL,
+                thought=plan.thought,
+                log=plan.log,
+            )
 
 
 def handle_task_status(
