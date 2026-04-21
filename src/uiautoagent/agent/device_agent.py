@@ -115,6 +115,7 @@ class Action(BaseModel):
 
     type: ActionType
     thought: str  # 为什么要执行这个动作
+    log: str = ""  # 简洁描述做了什么操作
     target: str | None = None  # 目标元素描述（tap用）
     position: tuple[int, int] | None = None  # 具体坐标
     text: str | None = None  # 输入的文本

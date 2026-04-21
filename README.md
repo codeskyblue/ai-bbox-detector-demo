@@ -246,6 +246,10 @@ AI 视觉定位可以精准识别屏幕上的 UI 元素：
 - Android 需要 ADB
 - iOS 需要 WebDriverAgent 和 [wdapy](https://github.com/openatx/wdapy)，设备列表需要 `idevice_id`（libimobiledevice）或 `tidevice`
 
+## 参考
+
+- 谷歌Paper，重复提示器提高准确度 https://arxiv.org/pdf/2512.14982
+
 ## License
 
 [LICENSE](LICENSE)

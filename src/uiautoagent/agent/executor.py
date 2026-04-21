@@ -20,6 +20,7 @@ class PlanResponse(BaseModel):
 
     type: str
     thought: str = ""
+    log: str = ""
     target: str | None = None
     text: str | None = None
     app_id: str | None = None
@@ -97,8 +98,9 @@ def get_system_prompt() -> str:
 
 请以JSON格式返回你的决策：
 {
-  "type": "操作类型",
   "thought": "为什么执行这个操作",
+  "log": "简洁说明为什么做和做了什么，格式如：为了进入搜索页面，点击了搜索按钮",
+  "type": "操作类型",
   "target": "目标元素描述（仅tap时需要，其他操作省略此字段）",
   "text": "输入文本（仅input时需要，其他操作省略此字段）",
   "app_id": "应用包名或Bundle ID（仅app_launch/app_stop时需要，其他操作省略此字段）",
@@ -144,23 +146,25 @@ def build_history_summary(history: list) -> str:
 
         # 构建动作详情
         parts = [f"类型: {action['type']}"]
-        if action.get("thought"):
+        if action.get("log"):
+            parts.append(f"操作: {action['log']}")
+        elif action.get("thought"):
             parts.append(f"思考: {action['thought']}")
-        if action.get("target"):
-            parts.append(f"目标: {action['target']}")
-        if action.get("text"):
-            parts.append(f"输入: {action['text']}")
-        if action.get("app_id"):
-            parts.append(f"应用: {action['app_id']}")
-        if action.get("direction"):
-            parts.append(f"方向: {action['direction']}")
-        if action.get("swipe_start") and action.get("swipe_end"):
-            parts.append(f"滑动: {action['swipe_start']} → {action['swipe_end']}")
-        if action.get("wait_ms"):
-            parts.append(f"等待: {action['wait_ms']}ms")
+        # if action.get("target"):
+        #     parts.append(f"目标: {action['target']}")
+        # if action.get("text"):
+        #     parts.append(f"输入: {action['text']}")
+        # if action.get("app_id"):
+        #     parts.append(f"应用: {action['app_id']}")
+        # if action.get("direction"):
+        #     parts.append(f"方向: {action['direction']}")
+        # if action.get("swipe_start") and action.get("swipe_end"):
+        #     parts.append(f"滑动: {action['swipe_start']} → {action['swipe_end']}")
+        # if action.get("wait_ms"):
+        #     parts.append(f"等待: {action['wait_ms']}ms")
 
         details = ", ".join(parts)
-        obs = f" → {h['observation']}" if h.get("observation") else ""
+        # obs = f" → {h['observation']}" if h.get("observation") else ""
         lines.append(f"[步骤{h['step']}] {status} {details}{obs}")
 
     return "\n".join(lines)
@@ -250,6 +254,7 @@ def parse_action_from_plan(plan: PlanResponse) -> Action:
     kwargs: dict = {
         "type": action_type,
         "thought": plan.thought or "",
+        "log": plan.log or "",
     }
 
     if plan.target:
