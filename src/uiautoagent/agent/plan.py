@@ -2,7 +2,6 @@
 
 from typing import Literal, Union
 from pydantic import BaseModel, Field, TypeAdapter
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -284,8 +283,10 @@ def parse_plan_response(raw: str) -> PlanAction:
     """
     解析 AI 返回的 JSON 为 PlanAction（Union 类型）
 
+    使用 json_repair 自动处理 markdown 代码块和常见的 LLM 格式错误。
+
     Args:
-        raw: JSON 字符串（可能被 markdown 代码块包裹，或有多个 JSON）
+        raw: JSON 字符串（可能被 markdown 代码块包裹）
 
     Returns:
         解析后的 PlanAction 实例
@@ -293,24 +294,22 @@ def parse_plan_response(raw: str) -> PlanAction:
     Raises:
         ValueError: 解析失败时
     """
-    import re
+    from json_repair import loads
 
-    cleaned = raw.strip()
-
-    # 移除 markdown 代码块标记
-    if cleaned.startswith("```"):
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", cleaned, re.DOTALL)
-        if match:
-            cleaned = match.group(1).strip()
+    if not raw.strip():
+        raise ValueError("未找到有效的 JSON 内容")
 
     try:
-        print("RAW:", cleaned)
-        data = json.loads(cleaned)
-        print("DD:", data)
+        data = loads(raw)
+        # json_repair 遇到多个 JSON 对象时会返回列表，取第一个
+        if isinstance(data, list):
+            if not data:
+                raise ValueError("未找到有效的 JSON 内容")
+            data = data[0]
         return _plan_adapter.validate_python(data)
-    except (json.JSONDecodeError, Exception) as e:
+    except (ValueError, Exception) as e:
         logger.warning(f"Failed to parse plan response: {e}")
-        logger.warning(f"Extracted JSON: {cleaned[:200]}")
+        logger.warning(f"Extracted JSON: {raw[:200]}")
         raise ValueError(f"无法解析 AI 返回的 JSON: {e}") from e
 
 
