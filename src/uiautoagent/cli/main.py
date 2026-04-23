@@ -177,7 +177,7 @@ def main():
         "-m",
         "--mode",
         choices=["manual", "ai", "find"],
-        default="find",
+        default="ai",
         help="运行模式",
     )
     parser.add_argument(
