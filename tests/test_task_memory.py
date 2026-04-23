@@ -19,6 +19,7 @@ def test_save_task_thread_safe(tmp_path):
             history=[],
             success=True,
             summary=f"summary-{index}",
+            original_task=f"task-{index}",
         )
 
     with ThreadPoolExecutor(max_workers=8) as executor:

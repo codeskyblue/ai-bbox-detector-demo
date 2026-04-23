@@ -185,8 +185,8 @@ class TaskMemory:
         task: str,
         history: list[TaskStep],
         success: bool,
+        original_task: str,
         summary: str | None = None,
-        original_task: str | None = None,
     ):
         """
         保存任务记忆
@@ -200,14 +200,12 @@ class TaskMemory:
         """
         memory = {
             "task": task,
+            "original_task": original_task,
             "success": success,
             "timestamp": datetime.now().isoformat(),
             "total_steps": len(history),
             "summary": summary or "",
         }
-
-        if original_task is not None:
-            memory["original_task"] = original_task
 
         with self._lock:
             self._memories.append(memory)
