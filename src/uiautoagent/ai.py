@@ -43,16 +43,14 @@ class Category(str, Enum):
     用于区分不同用途的 AI 调用，便于统计 token 使用量和配置不同模型。
     """
 
-    PLAN = "plan"
-    DETECT = "detect"
+    VISION = "vision"
     TEXT = "text"
     DEFAULT = "default"
 
 
 # 不同场景的模型配置
 _MODEL_CONFIG: dict[Category, str] = {
-    Category.PLAN: _get_env("MODEL_PLAN") or "",
-    Category.DETECT: _get_env("MODEL_DETECT") or "",
+    Category.VISION: _get_env("MODEL_VISION") or "",
     Category.TEXT: _get_env("MODEL_TEXT") or "",
 }
 _DEFAULT_MODEL = _get_env("MODEL_NAME", "gpt-4o")
@@ -219,9 +217,9 @@ def get_ai_model(category: Category | str | None = None) -> str:
         >>> from uiautoagent.ai import get_ai_model, Category
         >>> get_ai_model()  # 获取默认模型
         'gpt-4o'
-        >>> get_ai_model(Category.PLAN)  # 获取计划场景的模型
+        >>> get_ai_model(Category.VISION)  # 获取视觉场景的模型
         'gpt-4o-mini'
-        >>> get_ai_model("plan")  # 也支持字符串
+        >>> get_ai_model("vision")  # 也支持字符串
         'gpt-4o-mini'
     """
     if category:
@@ -315,7 +313,7 @@ def chat_completion(
     Args:
         category: 用途分类，用于 token 统计和模型选择。
                   支持 Category 枚举值或对应的字符串值
-                  如果配置了对应的环境变量（如 MODEL_PLAN），将使用该模型，
+                  如果配置了对应的环境变量（如 MODEL_VISION），将使用该模型，
                   否则使用默认模型（MODEL_NAME）。
         model: 可选，显式指定模型。如果提供，将覆盖 category 的模型选择。
         **kwargs: 传递给 chat.completions.create 的所有参数，包括：
@@ -332,7 +330,7 @@ def chat_completion(
         >>> from uiautoagent.ai import chat_completion, Category
         >>> # 使用 Category 枚举（推荐）
         >>> response = chat_completion(
-        ...     category=Category.PLAN,
+        ...     category=Category.VISION,
         ...     messages=[{"role": "user", "content": "Hello"}],
         ...     max_tokens=100,
         ... )
@@ -344,7 +342,7 @@ def chat_completion(
         ... )
         >>> # 显式指定模型
         >>> response = chat_completion(
-        ...     category=Category.PLAN,
+        ...     category=Category.VISION,
         ...     model="gpt-4o",
         ...     messages=[{"role": "user", "content": "Hello"}],
         ...     max_tokens=100,

@@ -32,9 +32,8 @@ UIAUTO_API_KEY=sk-xxx
 UIAUTO_MODEL_NAME=--suport-vision-model--
 
 # 可选：为不同场景配置不同的模型
-UIAUTO_MODEL_PLAN=         # AI规划模型（需要视觉能力）
-UIAUTO_MODEL_DETECT=       # 元素检测模型（需要视觉能力）
-UIAUTO_MODEL_TEXT=         # 文本处理模型（总结、澄清等）
+UIAUTO_MODEL_VISION=         # 视觉模型（规划+检测，需要视觉能力）
+UIAUTO_MODEL_TEXT=           # 文本处理模型（总结、澄清等）
 
 # 代理配置（可选）
 UIAUTO_MODEL_PROXY=http://127.0.0.1:7890
@@ -63,7 +62,7 @@ UIAUTO_MODEL_PROXY=http://localhost:1080
 # openai/gpt-5-mini   $0.25/M input tokens $2/M output tokens
 # z.ai/glm-4.6v       $0.30/M input tokens $0.90/M output tokens
 UIAUTO_MODEL_NAME=openai/gpt-5-mini
-UIAUTO_MODEL_DETECT=z-ai/glm-4.6v
+UIAUTO_MODEL_VISION=z-ai/glm-4.6v
 # 下面两个模型稍微贵点
 # openai/gpt-5.4-mini $0.75/M input tokens $4.50/M output tokens
 # z.ai/glm-5v-turbo   $1.20/M input tokens $4/M output tokens
@@ -81,8 +80,7 @@ UIAUTO_MODEL_NAME=doubao-seed-2.0-pro
 
 | 场景 | 环境变量 | 说明 | 模型要求 |
 |------|----------|------|----------|
-| `PLAN` | `UIAUTO_MODEL_PLAN` | AI 规划下一步操作 | 需要视觉能力 |
-| `DETECT` | `UIAUTO_MODEL_DETECT` | UI 元素检测定位 | 需要视觉能力 |
+| `VISION` | `UIAUTO_MODEL_VISION` | 视觉模型（规划+检测） | 需要视觉能力 |
 | `TEXT` | `UIAUTO_MODEL_TEXT` | 文本处理（总结、澄清、搜索） | 纯文本，无视觉要求 |
 
 ## 快速开始
@@ -121,8 +119,8 @@ uv run uiautoagent -m manual  # 手动控制
 
 ```
 🔍 检查模型可用性（共 2 个）...
-  ✅ 'gpt-4o' [default, plan]
-  ✅ 'gpt-4o-mini' [detect, text]
+  ✅ 'gpt-5.4' [default, vision]
+  ✅ 'gpt-4o-mini' [text]
 ```
 
 ## 任务报告
@@ -227,9 +225,9 @@ response = chat_completion(
 )
 content = response.choices[0].message.content
 
-# 规划场景（需要图片）
-plan_response = chat_completion(
-    category=Category.PLAN,
+# 视觉场景（需要图片）
+vision_response = chat_completion(
+    category=Category.VISION,
     messages=[{"role": "user", "content": "分析这张图片"}],
 )
 ```
@@ -259,7 +257,7 @@ AI 视觉定位可以精准识别屏幕上的 UI 元素：
 
 - Python 3.10+
 - OpenAI 兼容的 API
-  - 视觉场景（`PLAN`、`DETECT`）需要支持 Vision 的模型
+  - 视觉场景（`VISION`）需要支持 Vision 的模型
   - 文本场景（`TEXT`）使用普通聊天模型即可
 - Android 需要 ADB
 - iOS 需要 WebDriverAgent 和 [wdapy](https://github.com/openatx/wdapy)，设备列表需要 `idevice_id`（libimobiledevice）或 `tidevice`

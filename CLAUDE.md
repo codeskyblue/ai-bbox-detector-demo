@@ -66,9 +66,8 @@ src/uiautoagent/
 
 ## Model Configuration
 
-通过 `.env` 配置，三个场景可使用不同模型：
-- `PLAN`: AI 规划（需要视觉能力）
-- `DETECT`: 元素检测（需要视觉能力）
+通过 `.env` 配置，两个场景可使用不同模型：
+- `VISION`: 视觉模型（规划+检测，需要视觉能力）
 - `TEXT`: 文本处理（总结、澄清，纯文本即可）
 
 ## Public API

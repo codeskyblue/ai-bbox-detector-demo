@@ -164,7 +164,7 @@ def get_ai_action(system_prompt: str, user_prompt: str, screenshot_b64: str) -> 
         Action AI规划的动作
     """
     response = chat_completion(
-        category=Category.PLAN,
+        category=Category.VISION,
         messages=[
             {"role": "system", "content": system_prompt},
             {

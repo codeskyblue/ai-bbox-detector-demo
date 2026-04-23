@@ -194,7 +194,7 @@ def detect_element(
     w, h = img.size
 
     response = chat_completion(
-        category=Category.DETECT,
+        category=Category.VISION,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -299,7 +299,7 @@ def detect_elements(
     query_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(queries))
 
     response = chat_completion(
-        category=Category.DETECT,
+        category=Category.VISION,
         messages=[
             {
                 "role": "system",
