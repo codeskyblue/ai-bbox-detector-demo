@@ -230,3 +230,4 @@ uiautoagent_tasks/
 devimages/
 tasks/
 *.swp
+*.png

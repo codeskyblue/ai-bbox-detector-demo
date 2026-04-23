@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import List
 
+from PIL import Image
+
 from uiautoagent.controller.base import DeviceController, SwipeDirection
 
 
@@ -207,9 +209,15 @@ class AndroidController(DeviceController):
         """
         output = Path(output_path)
         temp_path = "/sdcard/screenshot.png"
-        self._run_adb("shell", "screencap", "-p", temp_path)
-        self._run_adb("pull", temp_path, str(output))
-        self._run_adb("shell", "rm", temp_path)
+        try:
+            self._run_adb("shell", "screencap", "-p", temp_path)
+            self._run_adb("pull", temp_path, str(output))
+            self._run_adb("shell", "rm", temp_path)
+        except RuntimeError:
+            # 安全验证等场景下 screencap 会失败，返回纯黑图片
+            info = self.get_device_info()
+            img = Image.new("RGB", (info["width"], info["height"]), (0, 0, 0))
+            img.save(output)
         return output
 
     @staticmethod

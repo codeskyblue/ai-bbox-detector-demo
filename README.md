@@ -94,19 +94,19 @@ uv run uiautoagent -m ai -t "修改昵称为 kitty"
 # 指定iOS设备
 uv run uiautoagent -m ai -t "修改昵称为 kitty" -p ios
 
-# 提供背景知识提高成功率
-uv run uiautoagent -m ai -t "修改昵称为 kitty" -kf knowledge.txt
+# 提供任务上下文提高成功率
+uv run uiautoagent -m ai -t "修改昵称为 kitty" -cf knowledge.txt
 
 # 其他模式
 uv run uiautoagent -m find    # 查找并点击
 uv run uiautoagent -m manual  # 手动控制
 ```
 
-### 背景知识文件
+### 任务上下文
 
-通过 `--knowledge-file` (`-kf`) 参数指定一个文本文件，为 AI 提供任务相关的背景信息，帮助 AI 更准确地定位元素和规划操作路径。
+通过 `--context-file` (`-cf`) 指定一个文本文件，或通过 `--context` (`-c`) 直接传入文本，为 AI 提供任务相关的背景信息，帮助 AI 更准确地定位元素和规划操作路径。
 
-知识文件示例 (`knowledge.txt`)：
+知识示例：
 ```
 微信修改昵称路径：点击底部"我" → 点击头像区域 → 点击"昵称" → 修改后点击"保存"
 设置按钮在右上角，是一个齿轮图标
@@ -163,10 +163,10 @@ if result.success:
 else:
     print(f"任务失败: {result.result}")
 
-# 提供背景知识提高成功率
+# 提供任务上下文提高成功率
 result = run_ai_task(
     "修改昵称为 kitty",
-    knowledge="微信修改昵称路径：点击底部'我' → 点击头像 → 点击'昵称' → 修改后点'保存'",
+    context="微信修改昵称路径：点击底部'我' → 点击头像 → 点击'昵称' → 修改后点'保存'",
 )
 
 # 如果任务需要返回观察结果（如"查看有多少个好友"）
