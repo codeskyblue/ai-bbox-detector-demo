@@ -1,10 +1,13 @@
 """AI agent module for autonomous device automation."""
 
 from uiautoagent.agent.ai_utils import clarify_task, summarize_task
-from uiautoagent.agent.device_agent import (
+from uiautoagent.agent.plan import (
     Action,
-    ActionDetail,
     ActionType,
+    TaskProposal,
+)
+from uiautoagent.agent.device_agent import (
+    ActionDetail,
     AgentConfig,
     DeviceAgent,
     RecordingController,
@@ -22,6 +25,7 @@ __all__ = [
     "AgentConfig",
     "RecordingController",
     "TaskStep",
+    "TaskProposal",
     # Memory
     "TaskMemory",
     "get_task_memory",

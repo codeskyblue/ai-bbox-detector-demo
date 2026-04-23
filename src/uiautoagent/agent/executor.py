@@ -160,20 +160,20 @@ def build_history_summary(history: list) -> str:
 
 
 def build_user_prompt_with_memory(
-    task: str, context: dict, memory_reference: str, knowledge: str | None = None
+    task: str, context: dict, memory_reference: str, user_context: str | None = None
 ) -> str:
-    """构建用户消息（包含历史任务参考和背景知识）"""
+    """构建用户消息（包含历史任务参考和任务上下文）"""
     from datetime import datetime
 
     history_summary = build_history_summary(context["history"])
     device_info = context["device_info"]
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    knowledge_section = ""
-    if knowledge:
-        knowledge_section = f"""## 背景知识
-以下是用户提供的关于当前任务的背景知识，请优先参考：
-{knowledge}
+    context_section = ""
+    if user_context:
+        context_section = f"""## 任务上下文
+以下是用户提供的关于当前任务的上下文信息，请优先参考：
+{user_context}
 
 """
 
@@ -182,7 +182,7 @@ def build_user_prompt_with_memory(
 设备信息：{device_info["model"]} ({device_info["width"]}x{device_info["height"]})
 当前时间：{current_time}
 
-{knowledge_section}{memory_reference}
+{context_section}{memory_reference}
 
 ## 当前任务执行历史
 {history_summary}
@@ -298,7 +298,7 @@ def handle_ai_error(agent: DeviceAgent, error: Exception):
 
 
 def execute_ai_task(
-    agent: DeviceAgent, task: str, knowledge: str | None = None
+    agent: DeviceAgent, task: str, user_context: str | None = None
 ) -> TaskResult:
     """
     使用AI自主执行任务，支持任务记忆复用
@@ -306,7 +306,7 @@ def execute_ai_task(
     Args:
         agent: 设备Agent
         task: 任务描述
-        knowledge: 用户提供的背景知识
+        user_context: 用户提供的任务上下文
 
     Returns:
         TaskResult: 任务执行结果
@@ -335,13 +335,13 @@ def execute_ai_task(
 
         # 准备数据
         screenshot_path = agent.get_current_screenshot()
-        context = agent.get_context_for_ai()
+        ai_context = agent.get_context_for_ai()
         screenshot_b64 = encode_screenshot(screenshot_path)
 
-        # 构建用户消息（包含历史任务参考和背景知识）
+        # 构建用户消息（包含历史任务参考和任务上下文）
         memory_reference = task_memory.format_for_ai(similar_tasks)
         user_prompt = build_user_prompt_with_memory(
-            task, context, memory_reference, knowledge=knowledge
+            task, ai_context, memory_reference, user_context=user_context
         )
 
         # 调用AI决策
@@ -401,7 +401,7 @@ def run_ai_task(
     max_steps: int = 30,
     verbose: bool = True,
     platform: str = "android",
-    knowledge: str | None = None,
+    context: str | None = None,
 ) -> TaskResult:
     """
     运行 AI 自主任务 - 便捷函数
@@ -414,7 +414,7 @@ def run_ai_task(
         max_steps: 最大执行步数
         verbose: 是否打印详细日志
         platform: 设备平台，"android" 或 "ios"
-        knowledge: 用户提供的背景知识，帮助AI更好地理解任务
+        context: 用户提供的任务上下文，帮助AI更好地理解任务
 
     Returns:
         TaskResult: 任务执行结果，包含 success 和 result 字段
@@ -454,8 +454,8 @@ def run_ai_task(
     print(f"📁 任务目录: {agent.task_dir}")
 
     print(f"\n🎯 任务: {task}")
-    if knowledge:
-        print(f"📖 背景知识: {knowledge[:100]}{'...' if len(knowledge) > 100 else ''}")
+    if context:
+        print(f"📖 任务上下文: {context[:100]}{'...' if len(context) > 100 else ''}")
 
     # 用AI澄清任务描述
     from uiautoagent.agent.ai_utils import clarify_task
@@ -466,7 +466,7 @@ def run_ai_task(
 
     # 执行AI自主任务
     try:
-        return execute_ai_task(agent, task, knowledge=knowledge)
+        return execute_ai_task(agent, task, user_context=context)
     except Exception as e:
         print(f"❌ 任务执行出错: {e}")
         return TaskResult(success=False, result=str(e))

@@ -90,6 +90,17 @@ class DoneParams(BaseModel):
     result: str | None = Field(default=None, description="任务返回的结果或答案")
 
 
+class TaskProposal(BaseModel):
+    """任务提案 - 记录原始输入和澄清后的任务"""
+
+    original_task: str = Field(..., description="用户原始输入的任务描述")
+    clarified_task: str = Field(..., description="AI澄清后的任务描述")
+    timestamp: str = Field(
+        default_factory=lambda: __import__("datetime").datetime.now().isoformat(),
+        description="提案创建时间",
+    )
+
+
 # ========== 联合类型 ==========
 
 ActionParams = Union[
