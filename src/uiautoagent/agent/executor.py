@@ -5,10 +5,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import dictlog
+
 from pydantic import BaseModel, ConfigDict
 
 from uiautoagent import Category, chat_completion
-from uiautoagent.agent import AgentConfig, DeviceAgent, ActionType
+from uiautoagent.agent import AgentConfig, DeviceAgent
 from uiautoagent.agent.ai_utils import compress_markdown, summarize_task
 from uiautoagent.agent.memory import TaskMemory, get_task_memory
 from uiautoagent.agent.plan import (
@@ -24,17 +26,20 @@ from uiautoagent.agent.plan import (
 from uiautoagent.controller import AndroidController, IOSController
 from uiautoagent.types import TokenUsage
 
+# 模块级 logger
+log = dictlog.get_logger(__name__)
+
 
 def _setup_android_device(serial: str | None) -> tuple:
     """设置Android设备，返回 (controller, serial) 或 (None, None)"""
     devices = AndroidController.list_devices()
     if not devices:
-        print("❌ 未检测到Android设备")
+        log.error("未检测到Android设备")
         return None, None
 
     if serial:
         if serial not in devices:
-            print(f"❌ 设备 {serial} 未找到")
+            log.error("设备未找到", serial=serial)
             return None, None
         device_serial = serial
     else:
@@ -50,7 +55,7 @@ def _setup_ios_device(udid: str | None) -> tuple:
 
     devices = IOSController.list_devices()
     if not devices:
-        print("❌ 未检测到iOS设备")
+        log.error("未检测到iOS设备")
         return None, None
 
     return IOSController(udid=devices[0]), devices[0]
@@ -203,7 +208,7 @@ def get_ai_action(system_prompt: str, user_prompt: str, screenshot_b64: str) -> 
     if not plan_text:
         raise ValueError("AI返回空响应")
 
-    print(f"[AI思考] {plan_text[:200]}...")
+    log.debug("AI思考", plan_preview=plan_text[:200])
 
     return parse_plan_response(plan_text)
 
@@ -222,16 +227,16 @@ def handle_task_status(
         TaskResult表示任务应该结束，None表示继续执行
     """
     if action.type == ActionType.DONE:
-        print("\n🎉 任务完成！")
+        log.info("任务完成")
 
         result = None
         # 如果需要返回结果
         assert isinstance(action.params, DoneParams)
         if action.params.return_result and action.params.result:
             result = action.params.result
-            print("\n📋 任务结果:")
-            print(f"   {result}")
-            print(f"\n📸 当前截图: {agent.get_current_screenshot()}")
+            log.info(
+                "任务结果", result=result, screenshot=agent.get_current_screenshot()
+            )
 
         # 先保存任务记忆（会调用summarize，产生token）
         summary = summarize_task(
@@ -244,7 +249,7 @@ def handle_task_status(
             summary=summary,
             original_task=original_task,
         )
-        print("💾 已保存任务记忆")
+        log.info("已保存任务记忆")
 
         # 然后保存历史和打印统计（包含summarize的token）
         agent.save_history()
@@ -253,7 +258,7 @@ def handle_task_status(
         return TaskResult(success=True, result=result)
 
     if action.type == ActionType.FAIL:
-        print(f"\n❌ AI认为任务无法完成: {action.thought}")
+        log.error("AI认为任务无法完成", thought=action.thought)
 
         # 先保存任务记忆（会调用summarize，产生token）
         summary = summarize_task(
@@ -278,7 +283,7 @@ def handle_task_status(
 
 def handle_ai_error(agent: DeviceAgent, error: Exception):
     """处理AI决策错误（非JSON解析错误时执行返回兜底）"""
-    print(f"❌ AI决策出错: {error}")
+    log.error("AI决策出错", error=str(error), error_type=type(error).__name__)
     step = agent.step(
         Action(
             type=ActionType.BACK,
@@ -309,20 +314,22 @@ def execute_ai_task(
     similar_tasks = task_memory.find_similar_tasks(proposal.clarified_task)
 
     if similar_tasks:
-        print(f"💡 找到 {len(similar_tasks)} 个相似历史任务，将作为参考:")
-        for i, task_mem in enumerate(similar_tasks, 1):
-            status = "✅" if task_mem["success"] else "❌"
-            print(f"   {i}. {status} {task_mem['task']}")
+        log.info(
+            f"找到 {len(similar_tasks)} 个相似历史任务，将作为参考",
+            similar_tasks_count=len(similar_tasks),
+            tasks=[
+                {"index": i, "success": t["success"], "task": t["task"]}
+                for i, t in enumerate(similar_tasks, 1)
+            ],
+        )
     else:
-        print("💡 未找到相似历史任务")
+        log.info("未找到相似历史任务")
 
     # 缓存系统提示词
     system_prompt = get_system_prompt()
 
     for step in range(max_steps):
-        print(f"\n{'=' * 50}")
-        print(f"🤖 AI决策 - 步骤 {step + 1}/{max_steps}")
-        print(f"{'=' * 50}")
+        log.info(f"AI决策", step=step + 1, max_steps=max_steps)
 
         # 准备数据
         screenshot_path = agent.get_current_screenshot()
@@ -380,13 +387,17 @@ def execute_ai_task(
 
         except ValueError as e:
             # AI返回格式错误且修复失败，跳过本步重试
-            print(f"⚠️  AI返回格式错误，跳过本步重试: {e}")
+            log.warning("AI返回格式错误，跳过本步重试", error=str(e))
 
         except Exception as e:
             handle_ai_error(agent, e)
 
     # 达到最大步数
-    print(f"\n⚠️  达到最大步数限制 ({max_steps})，任务可能未完成")
+    log.warning(
+        f"达到最大步数限制 ({max_steps})，任务可能未完成",
+        max_steps=max_steps,
+        actual_steps=agent.history,
+    )
     agent.save_history()
     agent.print_summary()
 
@@ -436,12 +447,11 @@ def run_ai_task(
         >>> from uiautoagent.agent import run_ai_task
         >>> result = run_ai_task("查看有多少个好友")
         >>> if result.success:
-        ...     print(f"任务完成: {result.result}")
+        ...     log.info("任务完成", result=result.result)
     """
-
-    print("=" * 50)
-    print("📱 设备Agent - AI自主决策模式")
-    print("=" * 50)
+    log.info("=" * 50)
+    log.info("📱 设备Agent - AI自主决策模式")
+    log.info("=" * 50)
 
     platform = platform.lower()
     if platform == "ios":
@@ -463,12 +473,20 @@ def run_ai_task(
     )
 
     info = controller.get_device_info()
-    print(f"📋 设备信息: {info['model']} ({info['width']}x{info['height']})")
-    print(f"📁 任务目录: {agent.task_dir}")
+    log.info(
+        "设备信息",
+        model=info["model"],
+        width=info["width"],
+        height=info["height"],
+        task_dir=agent.task_dir,
+    )
 
-    print(f"\n🎯 任务: {task}")
+    log.info("任务", task=task, has_context=context is not None)
     if context:
-        print(f"📖 任务上下文: {context[:100]}{'...' if len(context) > 100 else ''}")
+        log.info(
+            "任务上下文",
+            context=context[:100] + "..." if len(context) > 100 else context,
+        )
 
     # 用AI澄清任务描述
     from uiautoagent.agent.ai_utils import clarify_task
@@ -480,7 +498,7 @@ def run_ai_task(
     history_match = task_memory.find_by_original_task(original_task)
     if history_match:
         task = history_match["task"]
-        print(f"💡 历史任务匹配，复用已澄清的任务: {task!r}")
+        log.info("历史任务匹配，复用已澄清的任务", task=task)
     else:
         task = clarify_task(task)
 
@@ -488,11 +506,11 @@ def run_ai_task(
     proposal = TaskProposal(original_task=original_task, clarified_task=task)
     agent.proposal = proposal
 
-    print("🤖 AI将自主分析屏幕并决策每一步操作...\n")
+    log.info("AI将自主分析屏幕并决策每一步操作")
 
     # 执行AI自主任务
     try:
         return execute_ai_task(agent, proposal, user_context=context)
     except Exception as e:
-        print(f"❌ 任务执行出错: {e}")
+        log.error("任务执行出错", error=str(e), error_type=type(e).__name__)
         return TaskResult(success=False, result=str(e))

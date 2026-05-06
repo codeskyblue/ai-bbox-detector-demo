@@ -4,18 +4,25 @@ from __future__ import annotations
 
 import argparse
 
+import dictlog
+
 from uiautoagent.agent import Action, ActionType, AgentConfig, DeviceAgent
-from uiautoagent.agent.plan import TapParams, WaitParams, InputParams
+from uiautoagent.agent.plan import InputParams, TapParams, WaitParams
 from uiautoagent.agent.executor import run_ai_task
 from uiautoagent.ai import check_all_models_available
 from uiautoagent.controller import AndroidController, IOSController
 
+# 默认 logger，main 函数中会根据参数调整级别
+log = dictlog.get_logger()
+
 
 def demo_manual_control(platform: str = "android", serial: str | None = None):
     """演示手动控制Agent执行任务（适用于已知步骤的任务）"""
-    print("=" * 50)
-    print("📱 设备Agent - 手动控制模式")
-    print("=" * 50)
+    pass
+
+    log.info("=" * 50)
+    log.info("📱 设备Agent - 手动控制模式")
+    log.info("=" * 50)
 
     # 检查设备
     if platform == "ios":
@@ -24,18 +31,18 @@ def demo_manual_control(platform: str = "android", serial: str | None = None):
         else:
             devices = IOSController.list_devices()
             if not devices:
-                print("❌ 未检测到iOS设备")
+                log.error("未检测到iOS设备", platform=platform)
                 return
             controller = IOSController(udid=devices[0])
     else:
         devices = AndroidController.list_devices()
         if not devices:
-            print("❌ 未检测到Android设备，请确保ADB已连接")
+            log.error("未检测到Android设备", platform=platform, reason="ADB未连接")
             return
         serial = serial or devices[0]
         controller = AndroidController(serial)
 
-    print("✅ 检测到设备")
+    log.info("检测到设备", platform=platform, serial=serial)
 
     # 创建Agent
     agent = DeviceAgent(
@@ -47,7 +54,13 @@ def demo_manual_control(platform: str = "android", serial: str | None = None):
     )
 
     info = controller.get_device_info()
-    print(f"📋 设备信息: {info['model']} ({info['width']}x{info['height']})\n")
+    log.info(
+        "设备信息",
+        model=info["model"],
+        width=info["width"],
+        height=info["height"],
+        serial=serial,
+    )
 
     # 示例：打开应用并执行操作（手动步骤）
     steps = [
@@ -112,9 +125,11 @@ def demo_find_and_click(
     target: str = "返回按钮", platform: str = "android", serial: str | None = None
 ):
     """演示简单的查找并点击"""
-    print("=" * 50)
-    print("📱 设备Agent - 查找并点击")
-    print("=" * 50)
+    pass
+
+    log.info("=" * 50)
+    log.info("📱 设备Agent - 查找并点击")
+    log.info("=" * 50)
 
     if platform == "ios":
         if serial:
@@ -122,13 +137,13 @@ def demo_find_and_click(
         else:
             devices = IOSController.list_devices()
             if not devices:
-                print("❌ 未检测到iOS设备")
+                log.error("未检测到iOS设备", platform=platform)
                 return
             controller = IOSController(udid=devices[0])
     else:
         devices = AndroidController.list_devices()
         if not devices:
-            print("❌ 未检测到Android设备")
+            log.error("未检测到Android设备", platform=platform)
             return
         controller = AndroidController(devices[0])
     agent = DeviceAgent(controller)
@@ -139,7 +154,12 @@ def demo_find_and_click(
 
     result = detect_element(screenshot_path, target)
     if not result.found or not result.bbox:
-        print(f"❌ 未找到目标元素: {target}")
+        log.error(
+            "未找到目标元素",
+            target=target,
+            found=result.found,
+            has_bbox=result.bbox is not None,
+        )
         agent.save_history()
         return
 
@@ -217,7 +237,17 @@ def main():
         default=None,
         help="直接传入任务上下文文本",
     )
+    parser.add_argument(
+        "--log-level",
+        "-l",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="DEBUG",
+        help="日志级别（默认：DEBUG）",
+    )
     args = parser.parse_args()
+
+    # 设置日志级别
+    log.level = getattr(dictlog, args.log_level)
 
     if not check_all_models_available():
         return
@@ -231,11 +261,11 @@ def main():
 
         kpath = Path(args.context_file)
         if not kpath.exists():
-            print(f"❌ 任务上下文文件不存在: {kpath}")
+            log.error("任务上下文文件不存在", file=str(kpath))
             return
         context = kpath.read_text(encoding="utf-8").strip()
         if not context:
-            print("⚠️  任务上下文文件为空，已忽略")
+            log.warning("任务上下文文件为空，已忽略", file=str(kpath))
             context = None
 
     if args.mode == "manual":

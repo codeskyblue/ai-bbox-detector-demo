@@ -1,9 +1,15 @@
 """AI 辅助函数 - 任务总结、澄清等"""
 
 from __future__ import annotations
+
 import re
 
+import dictlog
+
 from uiautoagent.agent.device_agent import ActionType, TaskStep
+
+# 模块级 logger
+log = dictlog.get_logger(__name__)
 
 
 def summarize_task(
@@ -21,6 +27,7 @@ def summarize_task(
     Returns:
         纯文本格式的任务执行记录
     """
+    _ = task, original_task  # 保留参数供未来使用
     lines = []
     steps = []
     for h in history[:-1]:  # 最后一步通常是 DONE 或 FAIL，不计入步骤列表
@@ -75,12 +82,12 @@ def clarify_task(task: str) -> str:
         clarified = (response.choices[0].message.content or "").strip()
 
         if clarified and clarified != task:
-            print(f"✏️  任务已澄清: {clarified!r}")
+            log.info("任务已澄清", original=task, clarified=clarified)
             return clarified
         return task
 
     except Exception as e:
-        print(f"⚠️  任务澄清失败，使用原始描述: {e}")
+        log.warning("任务澄清失败，使用原始描述", error=str(e), task=task)
         return task
 
 

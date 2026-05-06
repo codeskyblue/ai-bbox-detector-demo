@@ -7,9 +7,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
+import dictlog
 import yaml
 
 from uiautoagent.agent import TaskStep
+
+# 模块级 logger
+log = dictlog.get_logger(__name__)
 
 
 def _str_presenter(dumper, data):
@@ -36,7 +40,9 @@ class TaskMemory:
                 data = yaml.safe_load(self.memory_file.read_text(encoding="utf-8"))
                 return data.get("tasks", []) if data else []
             except Exception as e:
-                print(f"⚠️  加载任务记忆失败: {e}")
+                log.warning(
+                    "加载任务记忆失败", file=str(self.memory_file), error=str(e)
+                )
                 return []
         return []
 
@@ -89,7 +95,11 @@ class TaskMemory:
             if m["success"] and (m["task"] == task or m.get("original_task") == task)
         ]
         if exact_matches:
-            print(f"💡 找到完全相同的任务 ({len(exact_matches)}个)")
+            log.info(
+                f"找到完全相同的任务 ({len(exact_matches)}个)",
+                count=len(exact_matches),
+                task=task,
+            )
             return sorted(exact_matches, key=lambda x: x["timestamp"], reverse=True)[
                 :limit
             ]

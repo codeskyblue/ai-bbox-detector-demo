@@ -6,12 +6,16 @@ import base64
 from pathlib import Path
 from typing import Type, TypeVar
 
+import dictlog
 import json
 
 from PIL import Image
 from pydantic import BaseModel, ValidationError
 
 from uiautoagent.ai import Category, chat_completion
+
+# 模块级 logger
+log = dictlog.get_logger(__name__)
 
 _T = TypeVar("_T", bound=BaseModel)
 
@@ -214,7 +218,7 @@ def detect_element(
     )
 
     raw = response.choices[0].message.content
-    print("Raw:", raw)
+    log.debug("Raw response", raw=raw[:200] if raw else None)
     loc = safe_validate_json(raw, ElementLocation)
 
     bbox = None
@@ -332,7 +336,7 @@ results字段中，key为元素描述，value为该元素的检测结果。
     )
 
     raw = response.choices[0].message.content
-    print("Raw multi-detect:", raw)
+    log.debug("Raw multi-detect response", raw=raw[:200] if raw else None)
     loc = safe_validate_json(raw, MultiElementLocation)
 
     # 转换结果

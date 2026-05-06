@@ -10,10 +10,14 @@ from functools import lru_cache
 from threading import Lock
 from typing import Any
 
+import dictlog
 import httpx
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
+
+# 模块级 logger
+log = dictlog.get_logger(__name__)
 
 # 当前进程的 session ID，用于 OpenRouter 等平台的请求追踪
 SESSION_ID = os.getenv("SESSION_ID") or str(uuid.uuid4())
@@ -268,7 +272,7 @@ def check_model_available(model: str) -> bool:
         )
         return bool(resp.choices and resp.choices[0].message is not None)
     except Exception as e:
-        print(f"  ❌ {model!r}: {e}")
+        log.error("模型不可用", model=model, error=str(e), error_type=type(e).__name__)
         return False
 
 
@@ -287,13 +291,19 @@ def check_all_models_available() -> bool:
         if m:
             models.setdefault(m, []).append(cat.value)
 
-    print(f"🔍 检查模型可用性（共 {len(models)} 个）...")
+    log.info(f"检查模型可用性（共 {len(models)} 个）...", total=len(models))
     all_ok = True
     for model, labels in models.items():
         label = ", ".join(labels)
         ok = check_model_available(model)
         status = "✅" if ok else "❌"
-        print(f"  {status} {model!r} [{label}]")
+        log.info(
+            f"  {status} {model!r} [{label}]",
+            model=model,
+            label=label,
+            status=status,
+            available=ok,
+        )
         if not ok:
             all_ok = False
     return all_ok

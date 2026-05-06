@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import dictlog
+
 from pydantic import BaseModel, ConfigDict
 
 from uiautoagent.controller.base import DeviceController, SwipeDirection
@@ -25,6 +27,9 @@ from uiautoagent.agent.plan import (
     TaskProposal,
     WaitParams,
 )
+
+# 模块级 logger
+log = dictlog.get_logger(__name__)
 
 
 class ActionDetail(BaseModel):
@@ -208,10 +213,10 @@ class DeviceAgent:
             path = Path("temp_screenshot.png")
         return self.controller.screenshot(path)
 
-    def _log(self, message: str):
+    def _log(self, message: str, **kwargs: Any):
         """打印日志"""
         if self.config.verbose:
-            print(message)
+            log.info(message, **kwargs)
 
     def _should_compare_screenshots(self, action: Action) -> bool:
         """判断是否需要对比操作前后的截图"""
@@ -543,7 +548,7 @@ class DeviceAgent:
         Path(path).write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        self._log(f"\n📝 任务历史已保存至: {path}")
+        self._log(f"📝 任务历史已保存至: {path}")
 
         # 同时保存可读的文本摘要
         self._save_text_summary()
@@ -653,18 +658,28 @@ class DeviceAgent:
         total_tokens = TokenTracker.get_total()
         stats_by_category = TokenTracker.get_stats()
 
-        print("\n" + "=" * 50)
-        print("📋 任务执行摘要")
-        print("=" * 50)
+        # 绑定任务上下文
+        task_log = log.bind(task=self.task)
+
+        task_log.info("=" * 50)
+        task_log.info("📋 任务执行摘要")
+        task_log.info("=" * 50)
         for step in self.history:
             status = "✅" if step.success else "❌"
-            print(f"[{step.step_number}] {status} {step.action}")
-        print("=" * 50)
+            task_log.info(
+                f"[{step.step_number}] {status} {step.action}",
+                step_number=step.step_number,
+                success=step.success,
+            )
+        task_log.info("=" * 50)
 
         # 打印 token 使用统计
         if total_tokens.total > 0:
-            print(
-                f"📊 Token: {total_tokens.total:,} (输入:{total_tokens.prompt:,}, 输出:{total_tokens.completion:,})"
+            task_log.info(
+                "📊 Token统计",
+                total=total_tokens.total,
+                prompt=total_tokens.prompt,
+                completion=total_tokens.completion,
             )
 
             # 按分类详细统计
@@ -676,13 +691,17 @@ class DeviceAgent:
                     "summarize": "任务总结",
                 }
 
-                print("\n按用途分类:")
+                task_log.info("按用途分类:")
                 for category, stats in stats_by_category.items():
                     name = category_names.get(category, category)
-                    print(
-                        f"  [{name}] {stats.total:,} tokens (输入:{stats.prompt:,}, 输出:{stats.completion:,})"
+                    task_log.info(
+                        f"[{name}]",
+                        category=name,
+                        total=stats.total,
+                        prompt=stats.prompt,
+                        completion=stats.completion,
                     )
-        print("=" * 50)
+        task_log.info("=" * 50)
 
     def get_context_for_ai(self) -> dict[str, Any]:
         """
