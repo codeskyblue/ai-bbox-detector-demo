@@ -208,7 +208,7 @@ def get_ai_action(system_prompt: str, user_prompt: str, screenshot_b64: str) -> 
     if not plan_text:
         raise ValueError("AI返回空响应")
 
-    log.debug("AI思考", plan_preview=plan_text[:200])
+    log.debug("AI Response", plan_preview=plan_text[:200])
 
     return parse_plan_response(plan_text)
 
@@ -329,7 +329,7 @@ def execute_ai_task(
     system_prompt = get_system_prompt()
 
     for step in range(max_steps):
-        log.info(f"AI决策", step=step + 1, max_steps=max_steps)
+        log.debug(f"AI决策中", step=step + 1, max_steps=max_steps)
 
         # 准备数据
         screenshot_path = agent.get_current_screenshot()

@@ -317,7 +317,6 @@ def generate_html_report(
                 {screenshots_html}
                 <div class="step-info">
                     {thought_html}
-                    <p class="observation">👁️ {html.escape(step.observation)}</p>
                     {similarity_html}
                     {detail_html}
                     {ai_html}
@@ -357,7 +356,6 @@ def generate_html_report(
     .screenshot-label {{ font-size: 12px; color: #999; text-align: center; margin-bottom: 4px; }}
     .step-info {{ flex: 1; font-size: 14px; line-height: 1.8; min-width: 200px; }}
     .thought {{ color: #666; font-style: italic; }}
-    .observation {{ color: #333; }}
     .detail {{ color: #1976d2; font-family: monospace; font-size: 13px; }}
     .ai-meta {{ color: #888; font-size: 12px; margin-top: 6px; }}
     .ai-response {{ margin-top: 8px; }}

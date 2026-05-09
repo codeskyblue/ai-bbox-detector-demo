@@ -126,7 +126,6 @@ class TaskStep(BaseModel):
     step_number: int
     screenshot_path: str
     action: Action
-    observation: str  # 执行后的观察结果
     action_detail: ActionDetail | None = None  # 操作详情（坐标等）
     success: bool
     timestamp: float
@@ -216,7 +215,7 @@ class DeviceAgent:
     def _log(self, message: str, **kwargs: Any):
         """打印日志"""
         if self.config.verbose:
-            log.info(message, **kwargs)
+            log.debug(message.strip(), **kwargs, stacklevel=2)
 
     def _should_compare_screenshots(self, action: Action) -> bool:
         """判断是否需要对比操作前后的截图"""
@@ -275,7 +274,6 @@ class DeviceAgent:
         self,
         action: Action,
         screenshot_path: Path,
-        observation: str,
         success: bool,
         elapsed: float,
         screenshot_after_path: str | None = None,
@@ -291,7 +289,6 @@ class DeviceAgent:
             step_number=self.step_count,
             screenshot_path=str(screenshot_path),
             action=action,
-            observation=observation,
             action_detail=detail,
             success=success,
             timestamp=time.time(),
@@ -303,13 +300,17 @@ class DeviceAgent:
     def _log_step(self, step: TaskStep):
         """打印步骤日志"""
         status = "✅" if step.success else "❌"
-        self._log(f"\n[步骤 {step.step_number}]")
-        if step.action.thought:
-            self._log(f"思考: {step.action.thought}")
-        self._log(f"动作: {step.action} {status}")
-        self._log(f"观察: {step.observation}")
-        if step.elapsed:
-            self._log(f"耗时: {step.elapsed:.2f}s")
+        self._log(
+            f"{step.action} {status}",
+            thought=step.action.thought,
+            elapsed=step.elapsed,
+            step_number=step.step_number,
+        )
+        # if step.action.thought:
+        #     self._log(f"思考: {step.action.thought}")
+        # self._log(f"动作: {step.action} {status}")
+        # if step.elapsed:
+        #     self._log(f"耗时: {step.elapsed:.2f}s")
 
     def _normalized_bbox_to_actual(
         self, bbox: list[int], screenshot_path: Path
@@ -460,7 +461,6 @@ class DeviceAgent:
         step = self._create_task_step(
             action=action,
             screenshot_path=screenshot_path,
-            observation=str(action),
             success=success,
             elapsed=elapsed,
             screenshot_after_path=screenshot_after_path,
@@ -492,8 +492,6 @@ class DeviceAgent:
 
         if step.action.thought:
             lines.append(f"思考: {step.action.thought}")
-
-        lines.append(f"观察: {step.observation}")
 
         if step.elapsed is not None:
             lines.append(f"耗时: {step.elapsed:.2f}s")
@@ -642,7 +640,6 @@ class DeviceAgent:
             lines.append(f"  动作: {step.action}")
             if step.action.thought:
                 lines.append(f"  思考: {step.action.thought}")
-            lines.append(f"  观察: {step.observation}")
             lines.append(f"  截图: screenshots/step_{step.step_number:03d}.png")
 
         lines.append("\n" + "=" * 60)
@@ -661,17 +658,13 @@ class DeviceAgent:
         # 绑定任务上下文
         task_log = log.bind(task=self.task)
 
-        task_log.info("=" * 50)
-        task_log.info("📋 任务执行摘要")
-        task_log.info("=" * 50)
         for step in self.history:
             status = "✅" if step.success else "❌"
-            task_log.info(
+            task_log.trace(
                 f"[{step.step_number}] {status} {step.action}",
                 step_number=step.step_number,
                 success=step.success,
             )
-        task_log.info("=" * 50)
 
         # 打印 token 使用统计
         if total_tokens.total > 0:
@@ -701,7 +694,6 @@ class DeviceAgent:
                         prompt=stats.prompt,
                         completion=stats.completion,
                     )
-        task_log.info("=" * 50)
 
     def get_context_for_ai(self) -> dict[str, Any]:
         """
@@ -716,7 +708,6 @@ class DeviceAgent:
                 HistoryEntry(
                     step_number=s.step_number,
                     action=s.action,
-                    observation=s.observation,
                     success=s.success,
                     image_similarity=s.image_similarity,
                 )

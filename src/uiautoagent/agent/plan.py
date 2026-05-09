@@ -238,7 +238,6 @@ class HistoryEntry(BaseModel):
 
     step_number: int = Field(..., description="步骤编号")
     action: Action = Field(..., description="执行的动作")
-    observation: str = Field(default="", description="执行后的观察结果")
     success: bool = Field(..., description="是否执行成功")
     image_similarity: float | None = Field(
         default=None, description="与上一步截图的相似度"
